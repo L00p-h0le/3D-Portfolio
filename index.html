@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#f3f1e9"><meta name="description" content="Step inside an interactive 3D portfolio. Open project drawers, explore the desk, change the music, and make yourself at home.">
+  <title>inside. — A living portfolio</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">{"imports":{"three":"./vendor/three.module.min.js","three/addons/":"./vendor/addons/"}}</script>
+</head>
+<body>
+  <header class="header">
+    <a href="#" class="brand" aria-label="inside home"><svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M5 12 16 6l11 6v13l-11 6L5 25V12Z" stroke="currentColor" stroke-width="1.6"/><path d="m5 12 11 6 11-6M16 18v13M10 9l11 6v7" stroke="currentColor" stroke-width="1.6"/></svg><span>inside<span class="brand-dot">.</span></span><span class="brand-description">A LIVING PORTFOLIO</span></a>
+    <nav class="top-nav" aria-label="Main navigation"><button data-action="projects">Selected work <span>03</span></button><button data-action="about">The person</button><button class="hello" data-action="contact">Say hello <span>↗</span></button></nav>
+  </header>
+
+  <main>
+    <section class="intro" aria-labelledby="welcome-title">
+      <div class="eyebrow"><span class="green-dot"></span> WELCOME TO MY CORNER OF THE INTERNET</div>
+      <h1 id="welcome-title">A little room.<br>A lot of <em>me.</em></h1>
+      <p>A space for the things I build, <br>the tools I love, and a little everyday life.</p>
+      <button class="explore-button" data-action="projects">Take a look around <span>↗</span></button>
+      <div class="intro-note"><span class="hand-arrow">↳</span><span>Everything has a story.<br>Click something to find it.</span></div>
+    </section>
+
+    <div class="room-toolbar"><span class="room-number">ROOM 001 <span>/</span> THE EVERYDAY STUDIO</span><button id="theme-button" aria-label="Close curtains and switch to night mode"><span id="theme-icon">☼</span><span id="theme-label">Daylight</span><span class="toggle-track"><i></i></span></button></div>
+    <section id="room-stage" aria-label="Interactive three-dimensional apartment">
+      <div id="canvas-container"></div>
+      <div id="hotspots" aria-label="Room objects"></div>
+      <div id="loading"><span class="loading-house">⌂</span><span>Making room for you<span class="loading-dots">...</span></span></div>
+      <div class="room-caption"><span class="live-dot"></span><span id="room-status" role="status">At the desk, making things.</span></div>
+      <div class="view-controls"><button id="reset-view" title="Reset room view" aria-label="Reset room view">↺</button><button id="toggle-labels" title="Toggle object labels" aria-label="Toggle object labels" aria-pressed="true">⌖</button></div>
+    </section>
+
+    <aside class="mini-player" aria-label="Music player"><button id="mini-play" class="record" aria-label="Play music"><span class="record-center">♪</span></button><div><span class="small-label">A LITTLE BACKGROUND COMPANY</span><button id="track-info" data-action="music">Window seat <span>↗</span></button><span class="music-subtitle" id="music-subtitle">Original ambient loop · sound off</span></div><div class="sound-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div></aside>
+
+    <nav class="room-dock" aria-label="Explore the room">
+      <button data-action="projects"><span class="dock-icon" data-icon="drawer"></span><span>Projects</span><kbd>1</kbd></button>
+      <button data-action="stack"><span class="dock-icon" data-icon="monitor"></span><span>My stack</span><kbd>2</kbd></button>
+      <button data-action="about"><span class="dock-icon" data-icon="person"></span><span>About me</span><kbd>3</kbd></button>
+      <span class="dock-divider"></span>
+      <button data-action="music"><span class="dock-icon" data-icon="music"></span><span>The playlist</span><kbd>4</kbd></button>
+      <button data-action="wardrobe"><span class="dock-icon" data-icon="shirt"></span><span>Wardrobe</span><kbd>5</kbd></button>
+    </nav>
+    <div class="explore-hint"><svg viewBox="0 0 16 20" fill="none" aria-hidden="true"><rect x="3" y="1" width="10" height="16" rx="5" stroke="currentColor"/><path d="M8 4v4" stroke="currentColor"/></svg>Drag to look around <span>·</span> Scroll to get closer</div>
+  </main>
+
+  <footer><span>BUILT WITH CURIOSITY. LIVED IN WITH CARE.</span><span><span id="local-time"></span><span class="footer-separator">/</span><span id="outfit-day"></span>’S FIT <span class="outfit-swatch"></span></span></footer>
+
+  <dialog id="detail-dialog" aria-labelledby="panel-title"><div class="panel-top"><span class="small-label" id="panel-location">THE PROJECT DRAWERS</span><button id="close-panel" aria-label="Close panel">×</button></div><div id="panel-content"></div></dialog>
+  <div id="toast" role="status"></div>
+  <input type="file" id="audio-file" accept="audio/*" hidden>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
