@@ -16,7 +16,7 @@ const viewButton = 'w-[30px] h-[30px] border border-line rounded-[5px] text-[18p
 
 export function RoomStage({ containerRef, labelRefs, labelsHidden, loading, status, onHotspot, onReset, onToggleLabels }: Props) {
   return (
-    <section className="absolute left-[28%] right-[1%] top-[32px] bottom-[110px] min-h-[420px] touch-none wide:left-[25%] wide:right-[3%] wide:bottom-[130px] tablet:left-[27%] tablet:right-[0%] mobile:left-0 mobile:right-0 mobile:top-[260px] mobile:bottom-auto mobile:h-[440px] mobile:min-h-0 short:bottom-[90px] short:min-h-[350px]" aria-label="Interactive three-dimensional apartment">
+    <section className="absolute left-[28%] right-[1%] top-[-80px] bottom-[110px] min-h-[420px] touch-none wide:left-[25%] wide:right-[3%] wide:bottom-[130px] tablet:left-[24%] tablet:right-[0%] mobile:left-0 mobile:right-0 mobile:top-[260px] mobile:bottom-auto mobile:h-[440px] mobile:min-h-0 short:bottom-[90px] short:min-h-[350px]" aria-label="Interactive three-dimensional apartment">
       <div ref={containerRef} className="absolute inset-0"></div>
       <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-label="Room objects">
         {HOTSPOTS.map((hotspot, i) => (

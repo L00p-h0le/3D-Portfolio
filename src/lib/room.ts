@@ -358,8 +358,8 @@ export class Room {
   }
   private resize(){
     const w=this.container.clientWidth,h=this.container.clientHeight;if(!w||!h)return;
-    const aspect=w/h;const size=aspect<1?13.2/aspect:10.2;
-    this.camera.left=-size*aspect/2;this.camera.right=size*aspect/2;this.camera.top=size/2;this.camera.bottom=-size/2;this.camera.updateProjectionMatrix();this.renderer.setSize(w,h);
+    const aspect=w/h;const size=aspect<1?13.2/aspect:10.2/1.2;const lift=aspect<1?0:.5;
+    this.camera.left=-size*aspect/2;this.camera.right=size*aspect/2;this.camera.top=size/2+lift;this.camera.bottom=-size/2+lift;this.camera.updateProjectionMatrix();this.renderer.setSize(w,h);
   }
   private tween(duration: number,update: (t: number) => void){return new Promise<void>(resolve=>{if(this.reduced){update(1);resolve();return;}this.tweens.push({start:performance.now(),duration:duration*1000,update,resolve});});}
   private async walkTo(x: number,z: number){

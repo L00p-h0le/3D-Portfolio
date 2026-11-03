@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ChangeEvent, type MouseEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react';
 import { profile } from './data/profile';
 import { MusicPlayer } from './lib/music';
 import { Room, type PanelType, type RoomAction } from './lib/room';
 import { storage } from './lib/storage';
 import { Header } from './components/Header';
 import { Intro } from './components/Intro';
-import { RoomToolbar } from './components/RoomToolbar';
 import { RoomStage } from './components/RoomStage';
 import { MiniPlayer } from './components/MiniPlayer';
 import { RoomDock } from './components/RoomDock';
@@ -122,11 +121,6 @@ export function App() {
     try { await roomRef.current?.openDrawer(i); setProjectIndex(i); setStatus(`Drawer 0${i + 1} · ${profile.projects[i].title || 'room for something good'}.`); } finally { busy.current = false; }
   };
 
-  const onBrand = (e: MouseEvent) => {
-    e.preventDefault();
-    if (dialogRef.current?.open && !busy.current) dialogRef.current.close(); else resetView();
-  };
-
   const onFile = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     audioAction(() => player.upload(file));
@@ -198,10 +192,9 @@ export function App() {
 
   return (
     <>
-      <Header onAction={type => action(type)} onBrand={onBrand} />
+      <Header night={night} onToggleNight={() => action('curtains')} onAction={type => action(type)} />
       <main className="h-[calc(100dvh-152px)] min-h-[600px] relative mobile:h-auto mobile:min-h-[900px] short:h-[calc(100dvh-123px)] short:min-h-[520px]">
         <Intro onExplore={() => action('projects')} />
-        <RoomToolbar night={night} onToggle={() => action('curtains')} />
         <RoomStage
           containerRef={containerRef}
           labelRefs={labelRefs}
