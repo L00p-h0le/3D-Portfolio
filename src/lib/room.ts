@@ -14,7 +14,7 @@ interface Tween { start: number; duration: number; update: (t: number) => void; 
 export const HOTSPOTS: { action: RoomAction; label: string; point: Vec3; num: string }[] = [
   { action:'projects', label:'The projects', point:[-2.8,1.9,.52], num:'01' },
   { action:'stack', label:'The workbench', point:[-.65,2.5,-2.2], num:'02' },
-  { action:'curtains', label:'Set the mood', point:[1.15,3.4,-3.2], num:'☼' },
+  { action:'curtains', label:'Pull the cord', point:[2.84,3.72,-3.3], num:'☼' },
   { action:'music', label:'Good company', point:[2.35,1.45,-2.6], num:'♪' },
   { action:'wardrobe', label:'A different day', point:[-3.05,3.28,-2.3], num:'↻' },
 ];
@@ -24,6 +24,10 @@ const POSTERS: { action: RoomAction; handle: string; color: string; path: string
   { action:'github', handle:'@L00p-h0le', color:'#3c5346', path:'M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12' },
   { action:'twitter', handle:'@G3ek_God', color:'#333a35', path:'M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z' },
 ];
+
+// Pull cord hanging between the window and the clock, plus where the avatar stands to reach it.
+// The arm swings out sideways (rotation.z, like the wave) so the reach stays visible from the camera.
+const CORD = { x:2.84, z:-3.3, top:3.45, length:1.66, reach:2.4, pull:2.12, aisle:[3.0,-1.85] as [number,number], stand:[3.39,-3.08] as [number,number] };
 
 const TAU = Math.PI * 2;
 const ease = (t: number) => t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
@@ -67,6 +71,12 @@ export class Room {
   private acDisplay!: THREE.Mesh;
   private acFlap!: THREE.Group;
   private clockHands!: { hour: THREE.Group; minute: THREE.Group; second: THREE.Group };
+  // Pull cord beside the window: the string stretches by cordPull and swings by cordSway.
+  private cordPivot!: THREE.Group;
+  private cordString!: THREE.Mesh;
+  private cordKnob!: THREE.Mesh;
+  private cordPull = 0;
+  private cordSway = 0;
   private avatar!: THREE.Group;
   private pelvis!: THREE.Group;
   private torso!: THREE.Group;
@@ -174,6 +184,33 @@ export class Room {
       this.box(.61,.08,.1,m.curtain,0,1,.02,curtain);
     }
     this.interactive(g,'curtains');
+    this.buildCord();
+  }
+  private buildCord(){
+    const m=this.m;const g=this.group(CORD.x,CORD.top,CORD.z);
+    this.box(.08,.06,.12,m.darkWood,0,.02,-.05,g,.015);
+    this.cordPivot=this.group(0,0,0,g);
+    const string=new THREE.CylinderGeometry(.008,.008,CORD.length,8);string.translate(0,-CORD.length/2,0);
+    this.cordString=new THREE.Mesh(string,this.material('#b9bbb0'));this.cordString.castShadow=true;this.cordPivot.add(this.cordString);
+    this.cordKnob=this.sphere(.055,this.material('#fbfaf2',{emissive:'#ffffff',emissiveIntensity:.18,roughness:.4}),0,-CORD.length,0,this.cordPivot);
+    // A generous invisible hit area, because the string itself is only a few pixels wide.
+    const hit=new THREE.Mesh(new THREE.BoxGeometry(.3,CORD.length+.2,.3),new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false}));
+    hit.position.y=-CORD.length/2;this.cordPivot.add(hit);
+    this.interactive(g,'curtains');
+  }
+  private applyCord(){
+    const length=CORD.length+this.cordPull;
+    this.cordString.scale.y=length/CORD.length;this.cordKnob.position.y=-length;
+    this.cordPivot.rotation.z=this.cordSway+(this.reduced?0:Math.sin(this.time*1.3)*.012);
+  }
+  private async pullCord(){
+    const arm=this.arms[1];this.waving=true;
+    await this.tween(.4,t=>{arm.rotation.z=THREE.MathUtils.lerp(0,CORD.reach,t);arm.rotation.x=-.35*t;});
+    await this.tween(.25,t=>{arm.rotation.z=THREE.MathUtils.lerp(CORD.reach,CORD.pull,t);this.cordPull=.1*t;});
+    // Let go: the cord springs back with a damped wobble while the arm drops.
+    this.tween(1.2,t=>{const d=t*1.2;this.cordPull=t===1?0:.1*Math.exp(-5*d)*Math.cos(12*d);this.cordSway=t===1?0:.2*Math.exp(-4*d)*Math.sin(10*d);});
+    await this.tween(.3,t=>{arm.rotation.z=THREE.MathUtils.lerp(CORD.pull,0,t);arm.rotation.x=-.35*(1-t);});
+    this.waving=false;
   }
   private buildDesk(){
     const m=this.m;const g=this.group(-.9,0,-2.48);
@@ -392,7 +429,8 @@ export class Room {
     if(action==='stack'){await this.resetCamera();await this.focusCamera();return;}
     if(action==='about'){await this.wave();return;}
     await this.stand();await this.walkTo(-.45,.35);
-    const dest: Partial<Record<RoomAction,[number,number]>>={projects:[-1.55,.52],curtains:[.55,-1.85],music:[1.3,-1.65],wardrobe:[-2.8,-1.2]};
+    if(action==='curtains'){await this.walkTo(...CORD.aisle);await this.walkTo(...CORD.stand);this.avatar.rotation.y=Math.PI;await this.pullCord();return;}
+    const dest: Partial<Record<RoomAction,[number,number]>>={projects:[-1.55,.52],music:[1.3,-1.65],wardrobe:[-2.8,-1.2]};
     const to=dest[action];if(to)await this.walkTo(...to);this.avatar.rotation.y=action==='projects'?-Math.PI/2:Math.PI;
     if(action==='projects')await this.openDrawer(index);
     if(action==='wardrobe'){await this.tween(.5,t=>{this.closetDoors[0].rotation.y=-t*1.1;this.closetDoors[1].rotation.y=t*1.1;});this.wardrobeOpen=true;}
@@ -401,7 +439,7 @@ export class Room {
     if(this.activeDrawer>=0){const d=this.drawers[this.activeDrawer];const start=d.position.z;await this.tween(.4,t=>d.position.z=start*(1-t));this.activeDrawer=-1;}
     if(this.wardrobeOpen){await this.tween(.4,t=>{this.closetDoors[0].rotation.y=-(1-t)*1.1;this.closetDoors[1].rotation.y=(1-t)*1.1;});this.wardrobeOpen=false;}
     await this.resetCamera();
-    if(!this.seated){await this.walkTo(-.45,.35);await this.walkTo(-.75,-1.35);this.avatar.rotation.y=Math.PI;await this.tween(.4,t=>{this.setSeat(t);this.chair.position.z=-.93-t*.42;});this.seated=true;}
+    if(!this.seated){if(this.avatar.position.x>2.5)await this.walkTo(...CORD.aisle);await this.walkTo(-.45,.35);await this.walkTo(-.75,-1.35);this.avatar.rotation.y=Math.PI;await this.tween(.4,t=>{this.setSeat(t);this.chair.position.z=-.93-t*.42;});this.seated=true;}
   }
   async setNight(night: boolean,instant=false){
     const from=this.night?1:0,to=night?1:0;this.night=night;
@@ -443,6 +481,7 @@ export class Room {
       else if(this.seated&&!this.waving){this.arms[0].rotation.x=-.72+Math.sin(this.time*6)*.045;this.arms[1].rotation.x=-.72+Math.cos(this.time*7)*.035;this.head.rotation.x=Math.sin(this.time*.8)*.025;}
       this.torso.scale.y=1+Math.sin(this.time*1.8)*.006;
     }
+    this.applyCord();
     const owner=Date.now()/1000+ownerTime.offsetMinutes*60;
     this.clockHands.second.rotation.z=-(owner%60)/60*TAU;this.clockHands.minute.rotation.z=-(owner/60%60)/60*TAU;this.clockHands.hour.rotation.z=-(owner/3600%12)/12*TAU;
     if(this.controls.enabled)this.controls.update();

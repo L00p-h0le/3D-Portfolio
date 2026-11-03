@@ -87,7 +87,7 @@ export function App() {
     busy.current = true;
     try {
       if (type === 'curtains') {
-        setStatus(night ? 'Opening the curtains…' : 'Closing the curtains…');
+        setStatus('Pulling the cord…');
         await room?.visit('curtains');
         const next = !night; setNight(next); storage.set('inside-theme', next ? 'night' : 'day');
         await room?.setNight(next); await room?.home();
