@@ -1,25 +1,77 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { outfits } from '../data/outfits';
 
-const TAU = Math.PI * 2;
-const ease = t => t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
-export const outfits = [
-  { day:'Sunday', name:'Slow Sunday', color:'#c3b190' },
-  { day:'Monday', name:'Fresh start', color:'#7e8a68' },
-  { day:'Tuesday', name:'Blue hour', color:'#6c8b9e' },
-  { day:'Wednesday', name:'Midweek warmth', color:'#be8869' },
-  { day:'Thursday', name:'Deep focus', color:'#7d7490' },
-  { day:'Friday', name:'Off the clock', color:'#ab795e' },
-  { day:'Saturday', name:'Weekend uniform', color:'#bca968' },
+export type RoomAction = 'projects' | 'stack' | 'about' | 'music' | 'wardrobe' | 'curtains' | 'ac' | 'bed';
+export type PanelType = 'projects' | 'stack' | 'about' | 'music' | 'wardrobe' | 'contact';
+type Vec3 = [number, number, number];
+type MaterialName = 'wood'|'darkWood'|'floor'|'wall'|'trim'|'cream'|'green'|'darkGreen'|'curtain'|'black'|'metal'|'gold'|'white'|'terracotta'|'soil'|'leaf'|'skin'|'hair'|'pants'|'shirt'|'screen';
+interface Tween { start: number; duration: number; update: (t: number) => void; resolve: () => void }
+
+// Hotspot labels rendered by React; the room projects them into place every frame.
+export const HOTSPOTS: { action: RoomAction; label: string; point: Vec3; num: string }[] = [
+  { action:'projects', label:'The projects', point:[-2.9,1.9,1.1], num:'01' },
+  { action:'stack', label:'The workbench', point:[-.65,2.5,-2.2], num:'02' },
+  { action:'curtains', label:'Set the mood', point:[1.15,3.4,-3.2], num:'☼' },
+  { action:'music', label:'Good company', point:[2.35,1.45,-2.6], num:'♪' },
+  { action:'wardrobe', label:'A different day', point:[-3.05,3.28,-2.3], num:'↻' },
 ];
 
+const TAU = Math.PI * 2;
+const ease = (t: number) => t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+
 export class Room {
-  constructor(container, onSelect) {
-    this.container = container; this.onSelect = onSelect; this.tweens = []; this.targets = []; this.labels = [];
+  private container: HTMLElement;
+  private onSelect: (action: RoomAction, index?: number) => void;
+  private tweens: Tween[] = [];
+  private targets: THREE.Object3D[] = [];
+  private labels: { el: HTMLElement; point: THREE.Vector3 }[] = [];
+  private reduced: boolean;
+  private clock = new THREE.Clock();
+  private time = 0;
+  private walking = false;
+  private waving = false;
+  private seated = true;
+  private night = false;
+  private acOn = true;
+  private activeDrawer = -1;
+  private wardrobeOpen = false;
+  private scene = new THREE.Scene();
+  private camera: THREE.OrthographicCamera;
+  private renderer: THREE.WebGLRenderer;
+  private controls: OrbitControls;
+  private raycaster = new THREE.Raycaster();
+  private pointer = new THREE.Vector2();
+  private resizeObserver: ResizeObserver;
+  private unbindPointer: () => void = () => {};
+  private m!: Record<MaterialName, THREE.MeshStandardMaterial>;
+  private ambient!: THREE.HemisphereLight;
+  private sun!: THREE.DirectionalLight;
+  private lampLight!: THREE.PointLight;
+  private monitorLight!: THREE.PointLight;
+  private moon!: THREE.DirectionalLight;
+  private windowMaterial!: THREE.MeshStandardMaterial;
+  private curtains: THREE.Group[] = [];
+  private chair!: THREE.Group;
+  private drawers: THREE.Group[] = [];
+  private closetDoors: THREE.Group[] = [];
+  private acLed!: THREE.Mesh;
+  private air: THREE.Mesh<THREE.TubeGeometry, THREE.MeshBasicMaterial>[] = [];
+  private avatar!: THREE.Group;
+  private pelvis!: THREE.Group;
+  private torso!: THREE.Group;
+  private hood!: THREE.Mesh;
+  private head!: THREE.Group;
+  private cap!: THREE.Group;
+  private legs: THREE.Group[] = [];
+  private shins: THREE.Group[] = [];
+  private arms: THREE.Group[] = [];
+  private sleeves: THREE.Mesh[] = [];
+
+  constructor(container: HTMLElement, onSelect: (action: RoomAction, index?: number) => void) {
+    this.container = container; this.onSelect = onSelect;
     this.reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    this.clock = new THREE.Clock(); this.walking = false; this.seated = true; this.night = false; this.acOn = true; this.activeDrawer = -1; this.wardrobeOpen = false;
-    this.scene = new THREE.Scene();
     this.camera = new THREE.OrthographicCamera(-8, 8, 6, -6, .1, 100);
     this.camera.position.set(11, 9, 13);
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -33,33 +85,44 @@ export class Room {
     this.controls.enablePan = false; this.controls.minPolarAngle = .65; this.controls.maxPolarAngle = 1.18;
     this.controls.minAzimuthAngle = .12; this.controls.maxAzimuthAngle = 1.35; this.controls.minZoom = .75; this.controls.maxZoom = 2.2;
     this.controls.update();
-    this.raycaster = new THREE.Raycaster(); this.pointer = new THREE.Vector2();
-    this.materials(); this.lights(); this.buildRoom(); this.buildAvatar(); this.bindPointer(); this.makeLabels();
+    this.materials(); this.lights(); this.buildRoom(); this.buildAvatar(); this.bindPointer();
     this.resize(); this.resizeObserver = new ResizeObserver(() => this.resize()); this.resizeObserver.observe(container);
     this.renderer.setAnimationLoop(() => this.frame());
   }
-  material(color, extra={}) { return new THREE.MeshStandardMaterial({ color, roughness:.82, ...extra }); }
-  materials() {
+  dispose() {
+    this.renderer.setAnimationLoop(null); this.resizeObserver.disconnect(); this.unbindPointer(); this.controls.dispose();
+    this.scene.traverse(o => {
+      if (o instanceof THREE.Mesh) {
+        o.geometry.dispose();
+        for (const mat of [o.material].flat() as THREE.Material[]) { (mat as THREE.MeshStandardMaterial).map?.dispose(); mat.dispose(); }
+      }
+    });
+    this.renderer.dispose(); this.renderer.domElement.remove();
+    this.tweens.forEach(t => t.resolve()); this.tweens = [];
+  }
+  setLabels(els: HTMLElement[]) { this.labels = els.map((el, i) => ({ el, point: new THREE.Vector3(...HOTSPOTS[i].point) })); }
+  private material(color: THREE.ColorRepresentation, extra: THREE.MeshStandardMaterialParameters = {}) { return new THREE.MeshStandardMaterial({ color, roughness:.82, ...extra }); }
+  private materials() {
     const woodCanvas = document.createElement('canvas'); woodCanvas.width=256;woodCanvas.height=256;
-    const c = woodCanvas.getContext('2d'); c.fillStyle='#c6a47c';c.fillRect(0,0,256,256);
+    const c = woodCanvas.getContext('2d')!; c.fillStyle='#c6a47c';c.fillRect(0,0,256,256);
     let seed=143; const random=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
     for(let i=0;i<270;i++){c.strokeStyle=`rgba(${random()>.5?'83,55,29':'248,222,180'},${random()*.14})`;c.lineWidth=random()*1.5;c.beginPath();const y=random()*256;c.moveTo(0,y);c.bezierCurveTo(80,y+random()*6,180,y-random()*7,256,y+random()*4);c.stroke();}
     const texture=new THREE.CanvasTexture(woodCanvas);texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
     this.m = { wood:this.material('#e2c19b',{map:texture}), darkWood:this.material('#a77f58',{map:texture}), floor:this.material('#ead3ad',{map:texture}), wall:this.material('#deded0'), trim:this.material('#f3eee0'), cream:this.material('#f0eee1'), green:this.material('#7b8860'), darkGreen:this.material('#3c5346'), curtain:this.material('#c0c5a9'), black:this.material('#333a35'), metal:this.material('#838b7a',{metalness:.45,roughness:.42}), gold:this.material('#a39c76',{metalness:.5}), white:this.material('#f7f5e7'), terracotta:this.material('#b47d60'), soil:this.material('#534b37'), leaf:this.material('#668158'), skin:this.material('#c58b65'), hair:this.material('#39352e'), pants:this.material('#b5ac92'), shirt:this.material(outfits[new Date().getDay()].color), screen:this.material('#243b34',{emissive:'#719d80',emissiveIntensity:.12}) };
   }
-  box(w,h,d,material,x=0,y=0,z=0,parent=this.scene,r=.025) {
+  private box(w: number,h: number,d: number,material: THREE.Material,x=0,y=0,z=0,parent: THREE.Object3D=this.scene,r=.025) {
     const mesh=new THREE.Mesh(r ? new RoundedBoxGeometry(w,h,d,2,Math.min(r,w/3,h/3,d/3)) : new THREE.BoxGeometry(w,h,d),material);
     mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;parent.add(mesh);return mesh;
   }
-  cylinder(rt,rb,h,material,x,y,z,parent=this.scene,segments=24) {
+  private cylinder(rt: number,rb: number,h: number,material: THREE.Material,x: number,y: number,z: number,parent: THREE.Object3D=this.scene,segments=24) {
     const o=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,segments),material);o.position.set(x,y,z);o.castShadow=true;o.receiveShadow=true;parent.add(o);return o;
   }
-  sphere(radius,material,x,y,z,parent=this.scene,scale=[1,1,1]) {
+  private sphere(radius: number,material: THREE.Material,x: number,y: number,z: number,parent: THREE.Object3D=this.scene,scale: Vec3=[1,1,1]) {
     const o=new THREE.Mesh(new THREE.SphereGeometry(radius,20,16),material);o.position.set(x,y,z);o.scale.set(...scale);o.castShadow=true;parent.add(o);return o;
   }
-  group(x=0,y=0,z=0,parent=this.scene){const g=new THREE.Group();g.position.set(x,y,z);parent.add(g);return g;}
-  interactive(group, action, index) { group.traverse(o=>{if(o.isMesh){o.userData={action,index};this.targets.push(o);}}); }
-  lights(){
+  private group(x=0,y=0,z=0,parent: THREE.Object3D=this.scene){const g=new THREE.Group();g.position.set(x,y,z);parent.add(g);return g;}
+  private interactive(group: THREE.Object3D, action: RoomAction, index?: number) { group.traverse(o=>{if((o as THREE.Mesh).isMesh){o.userData={action,index};this.targets.push(o);}}); }
+  private lights(){
     this.ambient=new THREE.HemisphereLight('#fff7df','#a6a987',2.5);this.scene.add(this.ambient);
     this.sun=new THREE.DirectionalLight('#fff0cc',3.1);this.sun.position.set(-1,8,5);this.sun.castShadow=true;
     this.sun.shadow.mapSize.set(2048,2048);Object.assign(this.sun.shadow.camera,{left:-8,right:8,top:8,bottom:-8,near:.5,far:25});this.sun.shadow.normalBias=.03;this.sun.shadow.bias=-.0003;this.sun.shadow.radius=4;this.scene.add(this.sun);
@@ -67,7 +130,7 @@ export class Room {
     this.monitorLight=new THREE.PointLight('#a0cce5',.2,4,2);this.monitorLight.position.set(-.7,1.5,-2);this.scene.add(this.monitorLight);
     this.moon=new THREE.DirectionalLight('#b1cfe7',0);this.moon.position.set(2,5,-4);this.scene.add(this.moon);
   }
-  buildRoom(){
+  private buildRoom(){
     const m=this.m;
     const shadow=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.ShadowMaterial({opacity:.1}));shadow.rotation.x=-Math.PI/2;shadow.position.y=-.27;shadow.receiveShadow=true;this.scene.add(shadow);
     this.box(8.2,.3,7.3,m.darkWood,0,-.12,0,this.scene,.08);
@@ -84,8 +147,8 @@ export class Room {
     for(let i=0;i<28;i++)for(const z of [-1,2.1])this.box(.026,.015,.18,m.cream,-1.74+i*.123,.13,z,this.scene,0);
     this.buildWindow();this.buildDesk();this.buildDrawers();this.buildBed();this.buildCloset();this.buildStereo();this.buildAC();this.buildDetails();
   }
-  buildWindow(){
-    const m=this.m;const g=this.group(.65,2.4,-3.43);this.windowGroup=g;
+  private buildWindow(){
+    const m=this.m;const g=this.group(.65,2.4,-3.43);
     this.box(3.15,1.87,.12,m.wood,0,0,0,g);
     this.windowMaterial=this.material('#d8e3d6',{emissive:'#d5e1cf',emissiveIntensity:.35});
     this.box(2.94,1.65,.05,this.windowMaterial,0,0,.08,g);
@@ -96,7 +159,6 @@ export class Room {
     this.box(3.4,.1,.4,m.wood,0,-.96,.17,g);
     const pole=this.cylinder(.025,.025,3.8,m.darkWood,0,1.09,.26,g);pole.rotation.z=Math.PI/2;
     for(const x of [-1.94,1.94])this.sphere(.06,m.darkWood,x,1.09,.26,g);
-    this.curtains=[];
     for(const side of [-1,1]){
       const curtain=this.group(side*1.46,0,.26,g);this.curtains.push(curtain);
       for(let i=0;i<11;i++){const fold=this.cylinder(.052,.062,2.06,m.curtain,-.28+i*.056,-.02,Math.sin(i*.8)*.025,curtain,12);fold.scale.z=.7;}
@@ -104,8 +166,8 @@ export class Room {
     }
     this.interactive(g,'curtains');
   }
-  buildDesk(){
-    const m=this.m;const g=this.group(-.9,0,-2.48);this.desk=g;
+  private buildDesk(){
+    const m=this.m;const g=this.group(-.9,0,-2.48);
     this.box(2.8,.13,1.17,m.wood,0,1.19,0,g,.045);
     for(const x of [-1.23,1.23])for(const z of [-.43,.43])this.box(.095,1.13,.095,m.darkWood,x,.6,z,g);
     this.box(2.4,.07,.07,m.darkWood,0,.4,-.43,g);
@@ -114,7 +176,7 @@ export class Room {
     this.box(1.25,.77,.075,m.black,0,0,0,mon,.04);
     this.box(1.14,.65,.012,m.screen,0,.015,.047,mon,.01);
     this.box(.07,.25,.07,m.black,0,-.46,-.02,mon);this.box(.4,.025,.25,m.black,0,-.56,0,mon);
-    const screenCanvas=document.createElement('canvas');screenCanvas.width=640;screenCanvas.height=360;const c=screenCanvas.getContext('2d');
+    const screenCanvas=document.createElement('canvas');screenCanvas.width=640;screenCanvas.height=360;const c=screenCanvas.getContext('2d')!;
     c.fillStyle='#233b35';c.fillRect(0,0,640,360);c.fillStyle='#344b40';c.fillRect(0,0,640,32);
     for(let i=0;i<3;i++){c.fillStyle=['#d7997a','#d4c487','#9ab793'][i];c.beginPath();c.arc(18+i*18,16,4,0,TAU);c.fill();}
     c.fillStyle='#dce7c9';c.font='20px monospace';c.fillText('a little curiosity,',40,100);c.fillText('a lot of possibilities.',40,132);
@@ -125,7 +187,7 @@ export class Room {
     this.box(.7,.035,.25,m.cream,.02,1.29,.25,g);
     for(let r=0;r<4;r++)for(let i=0;i<11;i++)this.box(.045,.008,.04,i===0?m.green:m.white,-.28+i*.055,1.313,.16+r*.055,g,.004);
     this.sphere(.055,m.cream,.56,1.3,.29,g,[.8,.3,1.3]);
-    const mug=this.cylinder(.09,.073,.17,m.terracotta,-.93,1.34,.3,g);this.cylinder(.073,.073,.008,m.soil,-.93,1.429,.3,g);
+    this.cylinder(.09,.073,.17,m.terracotta,-.93,1.34,.3,g);this.cylinder(.073,.073,.008,m.soil,-.93,1.429,.3,g);
     const handle=new THREE.Mesh(new THREE.TorusGeometry(.065,.016,8,16),m.terracotta);handle.position.set(-.82,1.36,.3);g.add(handle);
     this.cylinder(.14,.15,.025,m.darkGreen,-1.03,1.28,-.32,g);this.cylinder(.016,.016,.5,m.darkGreen,-1.03,1.52,-.32,g);
     this.cylinder(.09,.24,.23,m.green,-1.03,1.85,-.32,g);this.cylinder(.19,.19,.018,m.cream,-1.03,1.73,-.32,g);
@@ -139,13 +201,12 @@ export class Room {
     for(const x of [-.39,.39]){this.box(.055,.27,.055,m.metal,x,.81,0,this.chair);this.box(.075,.06,.4,m.darkGreen,x,.96,-.02,this.chair);}
     this.interactive(this.chair,'about');
   }
-  buildDrawers(){
-    const m=this.m;const g=this.group(-2.92,0,.52);this.drawerCabinet=g;
+  private buildDrawers(){
+    const m=this.m;const g=this.group(-2.92,0,.52);
     for(const x of [-.64,.64])for(const z of [-.4,.4])this.box(.1,.2,.1,m.darkWood,x,.17,z,g);
     this.box(1.55,.1,1.1,m.wood,0,.29,0,g);this.box(1.64,.12,1.14,m.wood,0,1.42,0,g);
     for(const x of [-.73,.73])this.box(.09,1.12,1.08,m.wood,x,.85,0,g);
     this.box(1.4,1.08,.06,m.darkWood,0,.83,-.49,g);
-    this.drawers=[];
     for(let i=0;i<3;i++){
       const drawer=this.group(0,1.2-i*.36,.0,g);this.drawers.push(drawer);
       this.box(1.4,.32,.08,m.wood,0,0,.55,drawer);
@@ -161,7 +222,7 @@ export class Room {
     this.box(.4,.045,.28,m.cream,.36,1.56,.06,g);
     this.interactive(g.children[4],'projects',0);
   }
-  buildBed(){
+  private buildBed(){
     const m=this.m;const g=this.group(2.55,0,.68);
     for(const x of [-.82,.82])for(const z of [-1.36,1.36])this.box(.13,.28,.13,m.darkWood,x,.22,z,g);
     this.box(1.94,.25,3.15,m.wood,0,.42,0,g,.07);
@@ -176,11 +237,10 @@ export class Room {
     this.box(.62,.72,.62,m.wood,2.95,.44,-1.42);
     this.cylinder(.1,.11,.05,m.darkGreen,2.95,.84,-1.42);this.cylinder(.017,.017,.3,m.gold,2.95,1,-1.42);this.cylinder(.14,.23,.27,m.cream,2.95,1.25,-1.42);
   }
-  buildCloset(){
-    const m=this.m;const g=this.group(-3.07,0,-2.63);this.closet=g;
+  private buildCloset(){
+    const m=this.m;const g=this.group(-3.07,0,-2.63);
     this.box(1.46,2.7,.85,m.wood,0,1.46,0,g,.045);
     this.box(1.27,2.45,.02,m.darkWood,0,1.46,.44,g);
-    this.closetDoors=[];
     for(const side of [-1,1]){
       const pivot=this.group(side*.69,1.47,.47,g);this.closetDoors.push(pivot);
       this.box(.69,2.58,.07,m.wood,-side*.345,0,0,pivot,.015);
@@ -192,12 +252,12 @@ export class Room {
     this.box(1.43,.1,.91,m.darkWood,0,.15,0,g);this.interactive(g,'wardrobe');
     this.box(.66,.3,.52,m.cream,0,2.97,-.05,g,.04);this.box(.68,.05,.54,m.darkWood,0,3.13,-.05,g);
   }
-  buildStereo(){
-    const m=this.m;const g=this.group(1.95,0,-2.77);this.stereo=g;
+  private buildStereo(){
+    const m=this.m;const g=this.group(1.95,0,-2.77);
     this.box(1.28,.09,.68,m.wood,0,.72,0,g);
     for(const x of [-.53,.53])for(const z of [-.23,.23])this.box(.05,.67,.05,m.darkWood,x,.36,z,g);
     this.box(.65,.13,.5,m.darkWood,0,.84,0,g);
-    this.record=this.cylinder(.21,.21,.025,m.black,-.07,.92,0,g,40);this.cylinder(.065,.065,.03,m.terracotta,-.07,.925,0,g);
+    this.cylinder(.21,.21,.025,m.black,-.07,.92,0,g,40);this.cylinder(.065,.065,.03,m.terracotta,-.07,.925,0,g);
     const arm=this.box(.025,.025,.31,m.gold,.22,.95,.03,g);arm.rotation.y=-.55;
     for(const x of [-.5,.5]){
       const speaker=this.group(x,.98,0,g);this.box(.25,.46,.28,m.darkWood,0,0,0,speaker);
@@ -206,19 +266,19 @@ export class Room {
     for(let i=0;i<8;i++)this.box(.04,.38,.38,i%2?m.green:m.terracotta,-.35+i*.045,.27,0,g);
     this.interactive(g,'music');
   }
-  buildAC(){
+  private buildAC(){
     const m=this.m;const g=this.group(-3.88,2.98,-.3);g.rotation.y=Math.PI/2;
     this.box(1.48,.45,.27,m.cream,0,0,0,g,.09);
     this.box(1.2,.08,.03,this.material('#a6afa1'),0,-.13,.14,g,.02);
     for(let i=0;i<4;i++)this.box(1.15,.012,.04,m.cream,0,-.105-i*.018,.16,g,.002);
     this.acLed=this.sphere(.018,this.material('#9cac84',{emissive:'#9cac84',emissiveIntensity:.7}),.55,.03,.15,g);
     this.interactive(g,'ac');
-    this.air=[];for(let i=0;i<4;i++){
+    for(let i=0;i<4;i++){
       const curve=new THREE.CatmullRomCurve3([new THREE.Vector3(-3.65,2.8,-.72+i*.24),new THREE.Vector3(-3.1,2.55,-.72+i*.24),new THREE.Vector3(-2.8,2.2,-.65+i*.24)]);
       const line=new THREE.Mesh(new THREE.TubeGeometry(curve,16,.008,4,false),new THREE.MeshBasicMaterial({color:'#e8f4e8',transparent:true,opacity:.28}));this.scene.add(line);this.air.push(line);
     }
   }
-  plant(x,y,z,s=1){
+  private plant(x: number,y: number,z: number,s=1){
     const g=this.group(x,y,z);const m=this.m;
     this.cylinder(.17*s,.13*s,.28*s,m.terracotta,0,.14*s,0,g);this.cylinder(.155*s,.155*s,.01,m.soil,0,.283*s,0,g);
     for(let i=0;i<9;i++){
@@ -226,7 +286,7 @@ export class Room {
       const leaf=this.sphere(.15*s,i%2?m.leaf:m.darkGreen,Math.sin(angle)*.16*s,.3*s+h,Math.cos(angle)*.16*s,g,[.48,1.3,.7]);leaf.rotation.z=-Math.sin(angle)*.7;leaf.rotation.y=angle;
     }return g;
   }
-  buildDetails(){
+  private buildDetails(){
     const m=this.m;
     this.plant(3.35,.1,2.8,1.6);
     // Two prints on the left wall, facing into the room.
@@ -251,7 +311,7 @@ export class Room {
     const face=this.cylinder(.23,.23,.045,m.cream,-1.4,3.11,-3.42);face.rotation.x=Math.PI/2;
     this.box(.015,.13,.014,m.darkGreen,-1.4,3.16,-3.385).rotation.z=-.3;this.box(.1,.013,.014,m.darkGreen,-1.36,3.11,-3.38);
   }
-  buildAvatar(){
+  private buildAvatar(){
     const m=this.m;this.avatar=this.group(-.75,-.24,-1.35);this.avatar.rotation.y=Math.PI;const a=this.avatar;
     this.pelvis=this.group(0,.91,0,a);
     this.box(.43,.25,.29,m.pants,0,0,0,this.pelvis,.08);
@@ -270,7 +330,6 @@ export class Room {
     this.sphere(.257,m.shirt,0,.04,-.025,this.cap,[.93,.5,.92]);
     this.box(.34,.035,.25,m.shirt,0,.035,.2,this.cap,.045);
     this.cap.visible=false;
-    this.legs=[];this.shins=[];this.arms=[];this.sleeves=[];
     for(const side of [-1,1]){
       const leg=this.group(side*.135,-.07,0,this.pelvis);this.legs.push(leg);
       this.box(.2,.39,.22,m.pants,0,-.18,0,leg,.06);
@@ -284,46 +343,43 @@ export class Room {
     }
     this.setSeat(1);this.interactive(a,'about');
   }
-  setSeat(amount){
-    this.seatAmount=amount;this.avatar.position.y=-.24*amount;
+  private setSeat(amount: number){
+    this.avatar.position.y=-.24*amount;
     for(let i=0;i<2;i++){this.legs[i].rotation.x=-Math.PI/2*amount;this.shins[i].rotation.x=Math.PI/2*amount;this.arms[i].rotation.x=-.7*amount;}
   }
-  bindPointer(){
-    const el=this.renderer.domElement;let down;
-    el.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY];});
-    const hit=e=>{const r=el.getBoundingClientRect();this.pointer.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);this.raycaster.setFromCamera(this.pointer,this.camera);return this.raycaster.intersectObjects(this.targets,false)[0];};
-    el.addEventListener('pointerup',e=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>6)return;const found=hit(e);if(found)this.onSelect(found.object.userData.action,found.object.userData.index);});
-    el.addEventListener('pointermove',e=>{el.style.cursor=hit(e)?'pointer':'grab';});
+  private bindPointer(){
+    const el=this.renderer.domElement;let down: [number, number] | undefined;
+    const hit=(e: PointerEvent)=>{const r=el.getBoundingClientRect();this.pointer.set((e.clientX-r.left)/r.width*2-1,-(e.clientY-r.top)/r.height*2+1);this.raycaster.setFromCamera(this.pointer,this.camera);return this.raycaster.intersectObjects(this.targets,false)[0];};
+    const onDown=(e: PointerEvent)=>{down=[e.clientX,e.clientY];};
+    const onUp=(e: PointerEvent)=>{if(!down||Math.hypot(e.clientX-down[0],e.clientY-down[1])>6)return;const found=hit(e);if(found)this.onSelect(found.object.userData.action,found.object.userData.index);};
+    const onMove=(e: PointerEvent)=>{el.style.cursor=hit(e)?'pointer':'grab';};
+    el.addEventListener('pointerdown',onDown);el.addEventListener('pointerup',onUp);el.addEventListener('pointermove',onMove);
+    this.unbindPointer=()=>{el.removeEventListener('pointerdown',onDown);el.removeEventListener('pointerup',onUp);el.removeEventListener('pointermove',onMove);};
   }
-  makeLabels(){
-    const data=[['projects','The projects',[-2.9,1.9,1.1],'01'],['stack','The workbench',[-.65,2.5,-2.2],'02'],['curtains','Set the mood',[1.15,3.4,-3.2],'☼'],['music','Good company',[2.35,1.45,-2.6],'♪'],['wardrobe','A different day',[-3.05,3.28,-2.3],'↻']];
-    const holder=document.querySelector('#hotspots');
-    for(const [action,label,pos,num] of data){const b=document.createElement('button');b.className='hotspot';b.innerHTML=`<span class="hotspot-dot">${num}</span><span>${label}</span><span class="hotspot-arrow">↗</span>`;b.setAttribute('aria-label',label);b.addEventListener('click',()=>this.onSelect(action));holder.appendChild(b);this.labels.push({el:b,point:new THREE.Vector3(...pos)});}
-  }
-  resize(){
+  private resize(){
     const w=this.container.clientWidth,h=this.container.clientHeight;if(!w||!h)return;
     const aspect=w/h;const size=aspect<1?13.2/aspect:10.2;
     this.camera.left=-size*aspect/2;this.camera.right=size*aspect/2;this.camera.top=size/2;this.camera.bottom=-size/2;this.camera.updateProjectionMatrix();this.renderer.setSize(w,h);
   }
-  tween(duration,update){return new Promise(resolve=>{if(this.reduced){update(1);resolve();return;}this.tweens.push({start:performance.now(),duration:duration*1000,update,resolve});});}
-  async walkTo(x,z){
+  private tween(duration: number,update: (t: number) => void){return new Promise<void>(resolve=>{if(this.reduced){update(1);resolve();return;}this.tweens.push({start:performance.now(),duration:duration*1000,update,resolve});});}
+  private async walkTo(x: number,z: number){
     const start=this.avatar.position.clone();const distance=Math.hypot(x-start.x,z-start.z);if(distance<.03)return;
     this.avatar.rotation.y=Math.atan2(x-start.x,z-start.z);this.walking=true;
     await this.tween(Math.min(1.3,distance*.33),t=>{this.avatar.position.x=THREE.MathUtils.lerp(start.x,x,t);this.avatar.position.z=THREE.MathUtils.lerp(start.z,z,t);});
     this.walking=false;this.setSeat(0);
   }
-  async stand(){if(!this.seated)return;this.seated=false;await this.tween(.35,t=>{this.setSeat(1-t);this.chair.position.z=-1.35+t*.42;});await this.walkTo(-.5,-.65);}
-  async openDrawer(index){
+  private async stand(){if(!this.seated)return;this.seated=false;await this.tween(.35,t=>{this.setSeat(1-t);this.chair.position.z=-1.35+t*.42;});await this.walkTo(-.5,-.65);}
+  async openDrawer(index: number){
     if(this.activeDrawer>=0&&this.activeDrawer!==index){const old=this.drawers[this.activeDrawer];const start=old.position.z;await this.tween(.28,t=>old.position.z=start*(1-t));}
     this.activeDrawer=index;const d=this.drawers[index];const start=d.position.z;
     await this.tween(.45,t=>{d.position.z=THREE.MathUtils.lerp(start,.65,t);this.arms[0].rotation.x=-.6*Math.sin(t*Math.PI);});
   }
-  async visit(action,index=0){
+  async visit(action: RoomAction,index=0){
     if(action==='stack'){await this.resetCamera();await this.focusCamera();return;}
     if(action==='about'){await this.wave();return;}
     await this.stand();await this.walkTo(-.45,.35);
-    const dest={projects:[-2.7,1.9],curtains:[.55,-1.85],music:[1.3,-1.65],wardrobe:[-2.8,-1.2]};
-    if(dest[action])await this.walkTo(...dest[action]);this.avatar.rotation.y=Math.PI;
+    const dest: Partial<Record<RoomAction,[number,number]>>={projects:[-2.7,1.9],curtains:[.55,-1.85],music:[1.3,-1.65],wardrobe:[-2.8,-1.2]};
+    const to=dest[action];if(to)await this.walkTo(...to);this.avatar.rotation.y=Math.PI;
     if(action==='projects')await this.openDrawer(index);
     if(action==='wardrobe'){await this.tween(.5,t=>{this.closetDoors[0].rotation.y=-t*1.1;this.closetDoors[1].rotation.y=t*1.1;});this.wardrobeOpen=true;}
   }
@@ -333,7 +389,7 @@ export class Room {
     await this.resetCamera();
     if(!this.seated){await this.walkTo(-.45,.35);await this.walkTo(-.75,-1.35);this.avatar.rotation.y=Math.PI;await this.tween(.4,t=>{this.setSeat(t);this.chair.position.z=-.93-t*.42;});this.seated=true;}
   }
-  async setNight(night,instant=false){
+  async setNight(night: boolean,instant=false){
     const from=this.night?1:0,to=night?1:0;this.night=night;
     await this.tween(instant?0:1,t=>{
       const v=THREE.MathUtils.lerp(from,to,t);
@@ -342,25 +398,25 @@ export class Room {
       this.windowMaterial.color.set('#d8e3d6').lerp(new THREE.Color('#536e84'),v);this.windowMaterial.emissiveIntensity=.35-v*.2;
     });
   }
-  async focusCamera(){
+  private async focusCamera(){
     this.controls.enabled=false;const start=this.camera.position.clone(),target=this.controls.target.clone(),zoom=this.camera.zoom;
     await this.tween(.8,t=>{this.camera.position.lerpVectors(start,new THREE.Vector3(3,5,8),t);this.controls.target.lerpVectors(target,new THREE.Vector3(-.7,1.55,-2.1),t);this.camera.zoom=THREE.MathUtils.lerp(zoom,1.75,t);this.camera.updateProjectionMatrix();this.camera.lookAt(this.controls.target);});
   }
-  async resetCamera(){
+  private async resetCamera(){
     this.controls.enabled=false;const pos=this.camera.position.clone(),target=this.controls.target.clone(),zoom=this.camera.zoom;
     const unchanged=pos.distanceTo(new THREE.Vector3(11,9,13))<.01&&target.distanceTo(new THREE.Vector3(0,1,0))<.01&&zoom===1;
     if(!unchanged)await this.tween(.6,t=>{this.camera.position.lerpVectors(pos,new THREE.Vector3(11,9,13),t);this.controls.target.lerpVectors(target,new THREE.Vector3(0,1,0),t);this.camera.zoom=THREE.MathUtils.lerp(zoom,1,t);this.camera.updateProjectionMatrix();this.camera.lookAt(this.controls.target);});
     this.controls.enabled=true;this.controls.update();
   }
   async wave(){const prev=this.avatar.rotation.y;this.waving=true;await this.tween(.8,t=>{this.avatar.rotation.y=THREE.MathUtils.lerp(prev,.5,Math.sin(t*Math.PI));this.arms[1].rotation.z=-Math.sin(t*Math.PI)*2.4;this.arms[1].rotation.x=-.4;});this.arms[1].rotation.z=0;this.avatar.rotation.y=prev;this.waving=false;}
-  setOutfit(day){
+  setOutfit(day: number){
     this.m.shirt.color.set(outfits[day].color);
     this.m.pants.color.set(['#c9b99b','#b5ac92','#596a6b','#d1c3a8','#454d48','#77775e','#697677'][day]);
     this.hood.visible=[1,4].includes(day);this.cap.visible=day===6;
     this.sleeves.forEach(sleeve=>{const short=[0,2,3,6].includes(day);sleeve.scale.y=short?.53:1;sleeve.position.y=short?-.05:-.13;});
   }
   toggleAC(){this.acOn=!this.acOn;this.acLed.visible=this.acOn;this.air.forEach(o=>o.visible=this.acOn);return this.acOn;}
-  frame(){
+  private frame(){
     const now=performance.now();this.time=this.clock.getElapsedTime();
     for(let i=this.tweens.length-1;i>=0;i--){const t=this.tweens[i];const p=t.duration===0?1:Math.min(1,(now-t.start)/t.duration);t.update(ease(p));if(p===1){this.tweens.splice(i,1);t.resolve();}}
     if(!this.reduced){

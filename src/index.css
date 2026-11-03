@@ -1,0 +1,52 @@
+/* Preflight is intentionally omitted: the original design relies on browser defaults
+   (button padding, paragraph margins, dialog UA styles), so only theme + utilities load. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-surface: var(--surface);
+  --color-accent: var(--accent);
+  --font-sans: 'DM Sans', sans-serif;
+  --font-display: 'Manrope', sans-serif;
+}
+
+@theme {
+  --animate-pulse-dots: pulse-dots 1s infinite;
+  --animate-spin-record: spin-record 5s linear infinite;
+  --animate-equalizer: equalizer .8s ease-in-out infinite alternate;
+  @keyframes pulse-dots { 50% { opacity: .2 } }
+  @keyframes spin-record { to { transform: rotate(360deg) } }
+  @keyframes equalizer { to { height: 3px } }
+}
+
+/* Same specificity as the original `body.night .x` / `.playing .x` selectors. */
+@custom-variant night (body.night &);
+@custom-variant playing (body.playing &);
+/* The original's inclusive breakpoints, declared in its cascade order. Hover applies on touch too. */
+@custom-variant hover (&:hover);
+@custom-variant wide (@media (min-width:1700px));
+@custom-variant tablet (@media (max-width:1150px));
+@custom-variant mobile (@media (max-width:980px));
+@custom-variant short (@media (max-height:760px) and (min-width:981px));
+
+@layer base {
+  :root{--bg:#f3f1e9;--ink:#303b32;--muted:#85887b;--line:#dcded2;--surface:#fafaf4;--accent:#697e51;--shadow:rgba(60,65,41,.08);font-family:'DM Sans',sans-serif;color:var(--ink);background:var(--bg);font-synthesis:none;color-scheme:light}
+  body.night{--bg:#202a28;--ink:#e0e6d3;--muted:#98a596;--line:#3e4b43;--surface:#2b3731;--accent:#adbe83;--shadow:#050e112a;color-scheme:dark}
+  *{box-sizing:border-box}
+  body{margin:0;min-width:320px;min-height:100dvh;overflow:hidden;background:var(--bg);color:var(--ink);transition:background 1s,color 1s}
+  @media(max-width:980px){body{overflow:auto}}
+  button,a,input{-webkit-tap-highlight-color:transparent}
+  button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+  button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:5px}
+  a{color:inherit;text-decoration:none}
+  button:hover{color:var(--accent)}
+  button:disabled{cursor:wait;opacity:.6}
+  button svg{pointer-events:none}
+  canvas{width:100%;height:100%;display:block;outline:none}
+  @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+}
