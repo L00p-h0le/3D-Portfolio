@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react';
-import { profile, socials } from './data/profile';
+import { ownerTime, profile, socials } from './data/profile';
 import { MusicPlayer } from './lib/music';
 import { Room, type PanelType, type RoomAction } from './lib/room';
 import { storage } from './lib/storage';
@@ -79,6 +79,7 @@ export function App() {
 
   const action = async (type: Action, index = 0) => {
     if (type === 'github' || type === 'twitter') { window.open(socials[type], '_blank', 'noopener'); return; }
+    if (type === 'clock') { toast(`It’s ${new Intl.DateTimeFormat('en', { hour:'numeric', minute:'2-digit', timeZone: ownerTime.zone }).format(new Date())} for me in ${ownerTime.label}.`); return; }
     if (busy.current) { toast('One moment — just getting there.'); return; }
     const room = roomRef.current;
     if (type === 'ac') { const on = room?.toggleAC(); toast(on ? 'A little breeze. AC is on.' : 'Quiet room. AC is off.'); return; }

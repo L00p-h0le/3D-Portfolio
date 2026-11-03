@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { outfits } from '../data/outfits';
+import { ownerTime } from '../data/profile';
 
-export type RoomAction = 'projects' | 'stack' | 'about' | 'music' | 'wardrobe' | 'curtains' | 'ac' | 'bed' | 'github' | 'twitter';
+export type RoomAction = 'projects' | 'stack' | 'about' | 'music' | 'wardrobe' | 'curtains' | 'ac' | 'bed' | 'github' | 'twitter' | 'clock';
 export type PanelType = 'projects' | 'stack' | 'about' | 'music' | 'wardrobe' | 'contact';
 type Vec3 = [number, number, number];
 type MaterialName = 'wood'|'darkWood'|'floor'|'wall'|'trim'|'cream'|'green'|'darkGreen'|'curtain'|'black'|'metal'|'gold'|'white'|'terracotta'|'soil'|'leaf'|'skin'|'hair'|'pants'|'shirt'|'screen';
@@ -65,6 +66,7 @@ export class Room {
   private acLed!: THREE.MeshStandardMaterial;
   private acDisplay!: THREE.Mesh;
   private acFlap!: THREE.Group;
+  private clockHands!: { hour: THREE.Group; minute: THREE.Group; second: THREE.Group };
   private avatar!: THREE.Group;
   private pelvis!: THREE.Group;
   private torso!: THREE.Group;
@@ -225,7 +227,6 @@ export class Room {
       this.box(.76,.04,.57,m.cream,.06,-.08,.05,drawer);
       this.interactive(drawer,'projects',i);
     }
-    const plant=this.plant(0,0,0,.7);g.add(plant);plant.position.set(-.33,1.49,-.09);
     const book=this.box(.43,.06,.3,m.darkGreen,.37,1.51,.06,g);book.rotation.y=.12;
     this.box(.4,.045,.28,m.cream,.36,1.56,.06,g);
     this.interactive(g.children[4],'projects',0);
@@ -242,8 +243,6 @@ export class Room {
     const blanket=this.material('#c6b599');this.box(1.93,.05,.65,blanket,0,.97,1.06,g,.04);this.box(.04,.35,.65,blanket,.96,.81,1.06,g,.02);
     for(let i=0;i<10;i++)this.box(1.94,.005,.012,m.cream,0,1.0,.8+i*.055,g,0);
     this.interactive(g,'bed');
-    this.box(.62,.72,.62,m.wood,2.95,.44,-1.42);
-    this.cylinder(.1,.11,.05,m.darkGreen,2.95,.84,-1.42);this.cylinder(.017,.017,.3,m.gold,2.95,1,-1.42);this.cylinder(.14,.23,.27,m.cream,2.95,1.25,-1.42);
   }
   private buildCloset(){
     const m=this.m;const g=this.group(-3.07,0,-2.63);
@@ -298,7 +297,7 @@ export class Room {
   }
   private buildDetails(){
     const m=this.m;
-    this.plant(3.35,.1,2.8,1.6);
+    this.plant(-3.35,.1,2.05,1.6);
     // GitHub and X posters on the left wall, facing into the room; each links to its profile.
     POSTERS.forEach((poster,i)=>{
       const frame=this.group(-3.9,2.55,1.95+i*1.02);frame.rotation.y=Math.PI/2;
@@ -317,9 +316,14 @@ export class Room {
     for(let i=0;i<3;i++){const a=i*TAU/3;this.box(.055,.39,.055,m.darkWood,.35+Math.sin(a)*.29,.27,2.28+Math.cos(a)*.29);}
     this.box(.33,.05,.25,m.terracotta,.27,.55,2.29).rotation.y=.3;this.box(.3,.04,.23,m.cream,.28,.59,2.28).rotation.y=.3;
     this.cylinder(.065,.055,.12,m.cream,.58,.58,2.16);
-    // Wall clock beside the window.
-    const face=this.cylinder(.23,.23,.045,m.cream,3.3,2.6,-3.42);face.rotation.x=Math.PI/2;
-    this.box(.015,.13,.014,m.darkGreen,3.3,2.65,-3.385).rotation.z=-.3;this.box(.1,.013,.014,m.darkGreen,3.34,2.6,-3.38);
+    // Wall clock beside the window, running on the owner's time; hands are set in frame().
+    const clock=this.group(3.3,2.6,-3.42);
+    const face=this.cylinder(.23,.23,.045,m.cream,0,0,0,clock);face.rotation.x=Math.PI/2;
+    for(let i=0;i<12;i++){const tick=this.group(0,0,.025,clock);tick.rotation.z=i*TAU/12;this.box(.012,i%3?.03:.05,.006,m.darkGreen,0,.19,0,tick,0);}
+    const hand=(w: number,l: number,z: number,material: THREE.Material)=>{const pivot=this.group(0,0,z,clock);this.box(w,l,.006,material,0,l/2-.02,0,pivot,0);return pivot;};
+    this.clockHands={hour:hand(.024,.13,.03,m.darkGreen),minute:hand(.016,.18,.036,m.darkGreen),second:hand(.007,.2,.042,m.terracotta)};
+    const cap=this.cylinder(.018,.018,.012,m.darkGreen,0,0,.046,clock);cap.rotation.x=Math.PI/2;
+    this.interactive(clock,'clock');
   }
   private buildAvatar(){
     const m=this.m;this.avatar=this.group(-.75,-.24,-1.35);this.avatar.rotation.y=Math.PI;const a=this.avatar;
@@ -439,6 +443,8 @@ export class Room {
       else if(this.seated&&!this.waving){this.arms[0].rotation.x=-.72+Math.sin(this.time*6)*.045;this.arms[1].rotation.x=-.72+Math.cos(this.time*7)*.035;this.head.rotation.x=Math.sin(this.time*.8)*.025;}
       this.torso.scale.y=1+Math.sin(this.time*1.8)*.006;
     }
+    const owner=Date.now()/1000+ownerTime.offsetMinutes*60;
+    this.clockHands.second.rotation.z=-(owner%60)/60*TAU;this.clockHands.minute.rotation.z=-(owner/60%60)/60*TAU;this.clockHands.hour.rotation.z=-(owner/3600%12)/12*TAU;
     if(this.controls.enabled)this.controls.update();
     this.renderer.render(this.scene,this.camera);
     const w=this.container.clientWidth,h=this.container.clientHeight;

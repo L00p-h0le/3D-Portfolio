@@ -12,6 +12,8 @@ export interface Profile {
 }
 
 export const socials = { github: 'https://github.com/L00p-h0le', twitter: 'https://x.com/G3ek_God' };
+// The wall clock shows the owner's time, not the visitor's. IST has no daylight saving, so a fixed offset is exact.
+export const ownerTime = { zone: 'Asia/Kolkata', label: 'India', offsetMinutes: 330 };
 
 // Replace these empty fields with your own details. Never displayed as fictional credentials.
 export const profile: Profile = {
