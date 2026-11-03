@@ -281,11 +281,11 @@ export class Room {
     // Louver flap hinged on the vent's front edge; it swings out while the AC runs.
     this.acFlap=this.group(0,-.17,.15,g);this.box(1.2,.07,.02,m.cream,0,-.035,0,this.acFlap,.008);this.acFlap.rotation.x=-.8;
     this.acLed=this.material('#b8f0a0',{emissive:'#9ee68a',emissiveIntensity:1.4});this.sphere(.02,this.acLed,.6,.06,.14,g);
-    this.box(.3,.12,.02,this.material('#2f3a33'),.32,.06,.14,g,.01);
-    const temp=document.createElement('canvas');temp.width=160;temp.height=64;const c=temp.getContext('2d')!;
-    c.fillStyle='#2f3a33';c.fillRect(0,0,160,64);c.fillStyle='#b8f0a0';c.font='bold 44px monospace';c.textAlign='center';c.textBaseline='middle';c.fillText('24°',80,34);
-    const tex=new THREE.CanvasTexture(temp);tex.colorSpace=THREE.SRGBColorSpace;
-    this.acDisplay=new THREE.Mesh(new THREE.PlaneGeometry(.26,.104),new THREE.MeshBasicMaterial({map:tex}));this.acDisplay.position.set(.32,.06,.152);g.add(this.acDisplay);
+    // Temperature printed straight onto the front panel, centred.
+    const temp=document.createElement('canvas');temp.width=320;temp.height=128;const c=temp.getContext('2d')!;
+    c.fillStyle='#4a7340';c.font='bold 104px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText('24°',160,68);
+    const tex=new THREE.CanvasTexture(temp);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=this.renderer.capabilities.getMaxAnisotropy();
+    this.acDisplay=new THREE.Mesh(new THREE.PlaneGeometry(.4,.16),new THREE.MeshBasicMaterial({map:tex,transparent:true}));this.acDisplay.position.set(0,.05,.137);g.add(this.acDisplay);
     this.interactive(g,'ac');
   }
   private plant(x: number,y: number,z: number,s=1){
@@ -301,15 +301,15 @@ export class Room {
     this.plant(3.35,.1,2.8,1.6);
     // GitHub and X posters on the left wall, facing into the room; each links to its profile.
     POSTERS.forEach((poster,i)=>{
-      const frame=this.group(-3.9,2.6,2.05+i*.9);frame.rotation.y=Math.PI/2;
-      this.box(.64,.87,.055,m.darkWood,0,0,0,frame);this.box(.54,.77,.015,m.cream,0,0,.04,frame);
-      const art=document.createElement('canvas');art.width=270;art.height=385;const c=art.getContext('2d')!;
-      c.fillStyle='#f0eee1';c.fillRect(0,0,270,385);
-      c.save();c.translate(63,80);c.scale(6,6);c.fillStyle=poster.color;c.fill(new Path2D(poster.path));c.restore();
-      c.fillStyle='#3c5346';c.font='bold 34px sans-serif';c.textAlign='center';c.fillText(poster.handle,135,305,240);
-      c.fillRect(95,332,80,4);
-      const tex=new THREE.CanvasTexture(art);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=4;
-      const face=new THREE.Mesh(new THREE.PlaneGeometry(.54,.77),new THREE.MeshStandardMaterial({map:tex,roughness:.9}));face.position.z=.049;face.receiveShadow=true;frame.add(face);
+      const frame=this.group(-3.9,2.55,1.95+i*1.02);frame.rotation.y=Math.PI/2;
+      this.box(.82,1.08,.055,m.darkWood,0,0,0,frame);this.box(.72,.98,.015,m.cream,0,0,.04,frame);
+      const art=document.createElement('canvas');art.width=512;art.height=697;const c=art.getContext('2d')!;
+      c.fillStyle='#f0eee1';c.fillRect(0,0,512,697);
+      c.save();c.translate(136,90);c.scale(10,10);c.fillStyle=poster.color;c.fill(new Path2D(poster.path));c.restore();
+      c.fillStyle='#24332a';c.font='bold 66px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText(poster.handle,256,450,470);
+      c.fillRect(196,520,120,8);
+      const tex=new THREE.CanvasTexture(art);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=this.renderer.capabilities.getMaxAnisotropy();
+      const face=new THREE.Mesh(new THREE.PlaneGeometry(.72,.98),new THREE.MeshStandardMaterial({map:tex,roughness:.9}));face.position.z=.049;face.receiveShadow=true;frame.add(face);
       this.interactive(frame,poster.action);
     });
     // Books and a mug on a small circular coffee table.
