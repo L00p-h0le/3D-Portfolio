@@ -11,7 +11,7 @@ export function ContactPanel() {
       <p className={panelText}>{email ? 'Have a project in mind, an interesting idea, or just a good song? Let’s talk.' : 'A place for future conversations. Contact details and social links will be added here.'}</p>
       {email
         ? <a className={panelButton} href={`mailto:${email}`}>{email} ↗</a>
-        : <TemplateFields rows={toBeAdded('Email', 'Social links')} />}
+        : <TemplateFields rows={profile.links.length ? toBeAdded('Email') : toBeAdded('Email', 'Social links')} />}
       {profile.links.filter(l => safeURL(l.url)).map(l => (
         <p key={l.url}><a href={safeURL(l.url)} target="_blank" rel="noopener noreferrer">{l.label} ↗</a></p>
       ))}

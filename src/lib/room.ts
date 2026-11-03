@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { outfits } from '../data/outfits';
 
-export type RoomAction = 'projects' | 'stack' | 'about' | 'music' | 'wardrobe' | 'curtains' | 'ac' | 'bed';
+export type RoomAction = 'projects' | 'stack' | 'about' | 'music' | 'wardrobe' | 'curtains' | 'ac' | 'bed' | 'github' | 'twitter';
 export type PanelType = 'projects' | 'stack' | 'about' | 'music' | 'wardrobe' | 'contact';
 type Vec3 = [number, number, number];
 type MaterialName = 'wood'|'darkWood'|'floor'|'wall'|'trim'|'cream'|'green'|'darkGreen'|'curtain'|'black'|'metal'|'gold'|'white'|'terracotta'|'soil'|'leaf'|'skin'|'hair'|'pants'|'shirt'|'screen';
@@ -11,11 +11,17 @@ interface Tween { start: number; duration: number; update: (t: number) => void; 
 
 // Hotspot labels rendered by React; the room projects them into place every frame.
 export const HOTSPOTS: { action: RoomAction; label: string; point: Vec3; num: string }[] = [
-  { action:'projects', label:'The projects', point:[-2.9,1.9,1.1], num:'01' },
+  { action:'projects', label:'The projects', point:[-2.8,1.9,.52], num:'01' },
   { action:'stack', label:'The workbench', point:[-.65,2.5,-2.2], num:'02' },
   { action:'curtains', label:'Set the mood', point:[1.15,3.4,-3.2], num:'☼' },
   { action:'music', label:'Good company', point:[2.35,1.45,-2.6], num:'♪' },
   { action:'wardrobe', label:'A different day', point:[-3.05,3.28,-2.3], num:'↻' },
+];
+
+// Simple Icons 24×24 marks, drawn onto the wall posters.
+const POSTERS: { action: RoomAction; handle: string; color: string; path: string }[] = [
+  { action:'github', handle:'@L00p-h0le', color:'#3c5346', path:'M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12' },
+  { action:'twitter', handle:'@G3ek_God', color:'#333a35', path:'M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z' },
 ];
 
 const TAU = Math.PI * 2;
@@ -56,8 +62,9 @@ export class Room {
   private chair!: THREE.Group;
   private drawers: THREE.Group[] = [];
   private closetDoors: THREE.Group[] = [];
-  private acLed!: THREE.Mesh;
-  private air: THREE.Mesh<THREE.TubeGeometry, THREE.MeshBasicMaterial>[] = [];
+  private acLed!: THREE.MeshStandardMaterial;
+  private acDisplay!: THREE.Mesh;
+  private acFlap!: THREE.Group;
   private avatar!: THREE.Group;
   private pelvis!: THREE.Group;
   private torso!: THREE.Group;
@@ -202,7 +209,8 @@ export class Room {
     this.interactive(this.chair,'about');
   }
   private buildDrawers(){
-    const m=this.m;const g=this.group(-2.92,0,.52);
+    // Back panel against the left wall, drawers facing into the room.
+    const m=this.m;const g=this.group(-3.33,0,.52);g.rotation.y=Math.PI/2;
     for(const x of [-.64,.64])for(const z of [-.4,.4])this.box(.1,.2,.1,m.darkWood,x,.17,z,g);
     this.box(1.55,.1,1.1,m.wood,0,.29,0,g);this.box(1.64,.12,1.14,m.wood,0,1.42,0,g);
     for(const x of [-.73,.73])this.box(.09,1.12,1.08,m.wood,x,.85,0,g);
@@ -217,7 +225,7 @@ export class Room {
       this.box(.76,.04,.57,m.cream,.06,-.08,.05,drawer);
       this.interactive(drawer,'projects',i);
     }
-    this.plant(-3.25,1.49,.43,.7);
+    const plant=this.plant(0,0,0,.7);g.add(plant);plant.position.set(-.33,1.49,-.09);
     const book=this.box(.43,.06,.3,m.darkGreen,.37,1.51,.06,g);book.rotation.y=.12;
     this.box(.4,.045,.28,m.cream,.36,1.56,.06,g);
     this.interactive(g.children[4],'projects',0);
@@ -270,13 +278,15 @@ export class Room {
     const m=this.m;const g=this.group(-3.88,2.98,-.3);g.rotation.y=Math.PI/2;
     this.box(1.48,.45,.27,m.cream,0,0,0,g,.09);
     this.box(1.2,.08,.03,this.material('#a6afa1'),0,-.13,.14,g,.02);
-    for(let i=0;i<4;i++)this.box(1.15,.012,.04,m.cream,0,-.105-i*.018,.16,g,.002);
-    this.acLed=this.sphere(.018,this.material('#9cac84',{emissive:'#9cac84',emissiveIntensity:.7}),.55,.03,.15,g);
+    // Louver flap hinged on the vent's front edge; it swings out while the AC runs.
+    this.acFlap=this.group(0,-.17,.15,g);this.box(1.2,.07,.02,m.cream,0,-.035,0,this.acFlap,.008);this.acFlap.rotation.x=-.8;
+    this.acLed=this.material('#b8f0a0',{emissive:'#9ee68a',emissiveIntensity:1.4});this.sphere(.02,this.acLed,.6,.06,.14,g);
+    this.box(.3,.12,.02,this.material('#2f3a33'),.32,.06,.14,g,.01);
+    const temp=document.createElement('canvas');temp.width=160;temp.height=64;const c=temp.getContext('2d')!;
+    c.fillStyle='#2f3a33';c.fillRect(0,0,160,64);c.fillStyle='#b8f0a0';c.font='bold 44px monospace';c.textAlign='center';c.textBaseline='middle';c.fillText('24°',80,34);
+    const tex=new THREE.CanvasTexture(temp);tex.colorSpace=THREE.SRGBColorSpace;
+    this.acDisplay=new THREE.Mesh(new THREE.PlaneGeometry(.26,.104),new THREE.MeshBasicMaterial({map:tex}));this.acDisplay.position.set(.32,.06,.152);g.add(this.acDisplay);
     this.interactive(g,'ac');
-    for(let i=0;i<4;i++){
-      const curve=new THREE.CatmullRomCurve3([new THREE.Vector3(-3.65,2.8,-.72+i*.24),new THREE.Vector3(-3.1,2.55,-.72+i*.24),new THREE.Vector3(-2.8,2.2,-.65+i*.24)]);
-      const line=new THREE.Mesh(new THREE.TubeGeometry(curve,16,.008,4,false),new THREE.MeshBasicMaterial({color:'#e8f4e8',transparent:true,opacity:.28}));this.scene.add(line);this.air.push(line);
-    }
   }
   private plant(x: number,y: number,z: number,s=1){
     const g=this.group(x,y,z);const m=this.m;
@@ -289,27 +299,27 @@ export class Room {
   private buildDetails(){
     const m=this.m;
     this.plant(3.35,.1,2.8,1.6);
-    // Two prints on the left wall, facing into the room.
-    for(let i=0;i<2;i++){
-      const frame=this.group(-3.9,2.05,1.25+i*.9);frame.rotation.y=Math.PI/2;
+    // GitHub and X posters on the left wall, facing into the room; each links to its profile.
+    POSTERS.forEach((poster,i)=>{
+      const frame=this.group(-3.9,2.6,2.05+i*.9);frame.rotation.y=Math.PI/2;
       this.box(.64,.87,.055,m.darkWood,0,0,0,frame);this.box(.54,.77,.015,m.cream,0,0,.04,frame);
-      const disk=this.cylinder(.15,.15,.01,i?m.terracotta:m.green,0,.12,.055,frame);disk.rotation.x=Math.PI/2;
-      this.box(.3,.03,.01,m.darkGreen,0,-.22,.054,frame);
-      if(!i)this.box(.18,.22,.01,m.green,.07,-.09,.055,frame);
-    }
-    // Peg rail and tote near the front edge.
-    this.box(.05,.09,.9,m.wood,-3.88,1.66,2.83);
-    for(let i=0;i<3;i++)this.box(.12,.04,.04,m.darkWood,-3.8,1.66,2.54+i*.28);
-    this.box(.11,.52,.4,m.cream,-3.69,1.19,2.77,this.scene,.04);
-    const toteHandle=new THREE.Mesh(new THREE.TorusGeometry(.13,.018,8,20,Math.PI),m.cream);toteHandle.rotation.y=Math.PI/2;toteHandle.position.set(-3.69,1.48,2.77);this.scene.add(toteHandle);
+      const art=document.createElement('canvas');art.width=270;art.height=385;const c=art.getContext('2d')!;
+      c.fillStyle='#f0eee1';c.fillRect(0,0,270,385);
+      c.save();c.translate(63,80);c.scale(6,6);c.fillStyle=poster.color;c.fill(new Path2D(poster.path));c.restore();
+      c.fillStyle='#3c5346';c.font='bold 34px sans-serif';c.textAlign='center';c.fillText(poster.handle,135,305,240);
+      c.fillRect(95,332,80,4);
+      const tex=new THREE.CanvasTexture(art);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=4;
+      const face=new THREE.Mesh(new THREE.PlaneGeometry(.54,.77),new THREE.MeshStandardMaterial({map:tex,roughness:.9}));face.position.z=.049;face.receiveShadow=true;frame.add(face);
+      this.interactive(frame,poster.action);
+    });
     // Books and a mug on a small circular coffee table.
     this.cylinder(.45,.45,.08,m.wood,.35,.48,2.28);
     for(let i=0;i<3;i++){const a=i*TAU/3;this.box(.055,.39,.055,m.darkWood,.35+Math.sin(a)*.29,.27,2.28+Math.cos(a)*.29);}
     this.box(.33,.05,.25,m.terracotta,.27,.55,2.29).rotation.y=.3;this.box(.3,.04,.23,m.cream,.28,.59,2.28).rotation.y=.3;
     this.cylinder(.065,.055,.12,m.cream,.58,.58,2.16);
-    // Wall clock above the desk.
-    const face=this.cylinder(.23,.23,.045,m.cream,-1.4,3.11,-3.42);face.rotation.x=Math.PI/2;
-    this.box(.015,.13,.014,m.darkGreen,-1.4,3.16,-3.385).rotation.z=-.3;this.box(.1,.013,.014,m.darkGreen,-1.36,3.11,-3.38);
+    // Wall clock beside the window.
+    const face=this.cylinder(.23,.23,.045,m.cream,3.3,2.6,-3.42);face.rotation.x=Math.PI/2;
+    this.box(.015,.13,.014,m.darkGreen,3.3,2.65,-3.385).rotation.z=-.3;this.box(.1,.013,.014,m.darkGreen,3.34,2.6,-3.38);
   }
   private buildAvatar(){
     const m=this.m;this.avatar=this.group(-.75,-.24,-1.35);this.avatar.rotation.y=Math.PI;const a=this.avatar;
@@ -378,8 +388,8 @@ export class Room {
     if(action==='stack'){await this.resetCamera();await this.focusCamera();return;}
     if(action==='about'){await this.wave();return;}
     await this.stand();await this.walkTo(-.45,.35);
-    const dest: Partial<Record<RoomAction,[number,number]>>={projects:[-2.7,1.9],curtains:[.55,-1.85],music:[1.3,-1.65],wardrobe:[-2.8,-1.2]};
-    const to=dest[action];if(to)await this.walkTo(...to);this.avatar.rotation.y=Math.PI;
+    const dest: Partial<Record<RoomAction,[number,number]>>={projects:[-1.55,.52],curtains:[.55,-1.85],music:[1.3,-1.65],wardrobe:[-2.8,-1.2]};
+    const to=dest[action];if(to)await this.walkTo(...to);this.avatar.rotation.y=action==='projects'?-Math.PI/2:Math.PI;
     if(action==='projects')await this.openDrawer(index);
     if(action==='wardrobe'){await this.tween(.5,t=>{this.closetDoors[0].rotation.y=-t*1.1;this.closetDoors[1].rotation.y=t*1.1;});this.wardrobeOpen=true;}
   }
@@ -415,7 +425,12 @@ export class Room {
     this.hood.visible=[1,4].includes(day);this.cap.visible=day===6;
     this.sleeves.forEach(sleeve=>{const short=[0,2,3,6].includes(day);sleeve.scale.y=short?.53:1;sleeve.position.y=short?-.05:-.13;});
   }
-  toggleAC(){this.acOn=!this.acOn;this.acLed.visible=this.acOn;this.air.forEach(o=>o.visible=this.acOn);return this.acOn;}
+  toggleAC(){
+    this.acOn=!this.acOn;const on=this.acOn;
+    const led=this.acLed;led.color.set(on?'#b8f0a0':'#7d847a');led.emissiveIntensity=on?1.4:0;this.acDisplay.visible=on;
+    const from=this.acFlap.rotation.x,to=on?-.8:0;this.tween(.6,t=>this.acFlap.rotation.x=THREE.MathUtils.lerp(from,to,t));
+    return on;
+  }
   private frame(){
     const now=performance.now();this.time=this.clock.getElapsedTime();
     for(let i=this.tweens.length-1;i>=0;i--){const t=this.tweens[i];const p=t.duration===0?1:Math.min(1,(now-t.start)/t.duration);t.update(ease(p));if(p===1){this.tweens.splice(i,1);t.resolve();}}
@@ -423,7 +438,6 @@ export class Room {
       if(this.walking){const step=Math.sin(this.time*12);this.legs[0].rotation.x=step*.43;this.legs[1].rotation.x=-step*.43;this.arms[0].rotation.x=-step*.35;this.arms[1].rotation.x=step*.35;this.avatar.position.y=Math.abs(step)*.035;}
       else if(this.seated&&!this.waving){this.arms[0].rotation.x=-.72+Math.sin(this.time*6)*.045;this.arms[1].rotation.x=-.72+Math.cos(this.time*7)*.035;this.head.rotation.x=Math.sin(this.time*.8)*.025;}
       this.torso.scale.y=1+Math.sin(this.time*1.8)*.006;
-      this.air.forEach((o,i)=>o.material.opacity=.1+(Math.sin(this.time*1.5-i*.5)+1)*.09);
     }
     if(this.controls.enabled)this.controls.update();
     this.renderer.render(this.scene,this.camera);
