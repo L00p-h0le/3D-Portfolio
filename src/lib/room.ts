@@ -77,6 +77,13 @@ export class Room {
   private cordKnob!: THREE.Mesh;
   private cordPull = 0;
   private cordSway = 0;
+  // Record player: the platter spins and the arm swings in while music plays.
+  private platter!: THREE.Group;
+  private tonearm!: THREE.Group;
+  private cones: THREE.Mesh[] = [];
+  private stereoLed!: THREE.MeshStandardMaterial;
+  private musicOn = false;
+  private musicProgress: () => number = () => 0;
   private avatar!: THREE.Group;
   private pelvis!: THREE.Group;
   private torso!: THREE.Group;
@@ -300,15 +307,54 @@ export class Room {
     const m=this.m;const g=this.group(1.95,0,-2.77);
     this.box(1.28,.09,.68,m.wood,0,.72,0,g);
     for(const x of [-.53,.53])for(const z of [-.23,.23])this.box(.05,.67,.05,m.darkWood,x,.36,z,g);
-    this.box(.65,.13,.5,m.darkWood,0,.84,0,g);
-    this.cylinder(.21,.21,.025,m.black,-.07,.92,0,g,40);this.cylinder(.065,.065,.03,m.terracotta,-.07,.925,0,g);
-    const arm=this.box(.025,.025,.31,m.gold,.22,.95,.03,g);arm.rotation.y=-.55;
-    for(const x of [-.5,.5]){
-      const speaker=this.group(x,.98,0,g);this.box(.25,.46,.28,m.darkWood,0,0,0,speaker);
-      for(const y of [-.08,.12]){const cone=this.cylinder(y<0?.075:.037,y<0?.075:.037,.012,m.black,0,y,.15,speaker);cone.rotation.x=Math.PI/2;}
+    // Turntable: walnut plinth, matte top plate, platter with grooves, and a tonearm that swings in while music plays.
+    this.box(.7,.11,.52,m.darkWood,0,.825,0,g,.03);
+    this.box(.66,.012,.48,this.material('#454b43',{roughness:.6}),0,.884,0,g,.004);
+    for(const x of [-.22,.22])this.box(.06,.03,.025,m.gold,x,.895,-.255,g,.006);
+    this.platter=this.group(-.07,.9,0,g);
+    this.cylinder(.215,.215,.018,m.metal,0,0,0,this.platter,48);
+    this.cylinder(.205,.205,.012,this.material('#1f2420',{roughness:.32}),0,.014,0,this.platter,48);
+    const groove=this.material('#3b423c',{roughness:.3});
+    for(const r of [.19,.165,.14,.112]){const ring=new THREE.Mesh(new THREE.TorusGeometry(r,.0022,4,64),groove);ring.rotation.x=Math.PI/2;ring.position.y=.0205;this.platter.add(ring);}
+    this.cylinder(.072,.072,.014,m.terracotta,0,.016,0,this.platter,32);
+    this.box(.055,.004,.014,m.cream,.03,.024,0,this.platter,0);
+    this.cylinder(.006,.006,.035,m.metal,0,.03,0,this.platter,8);
+    // Tonearm pivots at the back right; rotation.y 0.15 is its rest, about -0.45 drops it on the lead-in groove.
+    this.tonearm=this.group(.22,.89,-.17,g);
+    this.cylinder(.035,.042,.03,m.metal,0,.015,0,this.tonearm);
+    this.box(.016,.016,.3,m.gold,0,.05,.15,this.tonearm,.004);
+    this.box(.04,.012,.05,m.black,0,.044,.3,this.tonearm,.004);
+    const weight=this.cylinder(.022,.022,.04,m.black,0,.05,-.04,this.tonearm,16);weight.rotation.x=Math.PI/2;
+    this.tonearm.rotation.y=.15;
+    this.cylinder(.008,.008,.05,m.metal,.33,.91,.06,g,8);
+    const knob=this.cylinder(.028,.03,.02,m.metal,.25,.895,.18,g,20);knob.rotation.y=.4;
+    this.stereoLed=this.material('#5d4733',{emissive:'#e8603c',emissiveIntensity:0});this.sphere(.011,this.stereoLed,.17,.895,.2,g);
+    // Bookshelf speakers: walnut cabinets, fabric baffle, ringed woofer and tweeter.
+    const cloth=this.material('#545a4f',{roughness:.95});
+    for(const x of [-.53,.53]){
+      const speaker=this.group(x,.99,0,g);this.box(.25,.46,.28,m.darkWood,0,0,0,speaker,.03);
+      this.box(.215,.42,.012,cloth,0,0,.136,speaker,.01);
+      for(const [y,r] of [[-.075,.072],[.12,.034]] as const){
+        const ring=new THREE.Mesh(new THREE.TorusGeometry(r,.006,8,32),m.metal);ring.position.set(0,y,.145);speaker.add(ring);
+        const cone=this.cylinder(r*.92,r*.92,.012,m.black,0,y,.143,speaker,32);cone.rotation.x=Math.PI/2;if(y<0)this.cones.push(cone);
+        this.sphere(r*.32,y<0?m.black:m.gold,0,y,.15,speaker,[1,1,.5]);
+      }
+      this.box(.05,.012,.004,m.gold,0,-.19,.144,speaker,0);
     }
-    for(let i=0;i<8;i++)this.box(.04,.38,.38,i%2?m.green:m.terracotta,-.35+i*.045,.27,0,g);
+    ['#c8693f','#7b8860','#3c5346','#e0b36a','#8297a1','#b79876','#a85a47','#5c6b4a'].forEach((color,i)=>this.box(.04,.38,.38,this.material(color),-.35+i*.045,.27,0,g));
     this.interactive(g,'music');
+  }
+  /** Called by App whenever playback starts or stops; progress lets the arm creep toward the label. */
+  setMusic(on: boolean,progress: () => number = () => 0){
+    this.musicOn=on;this.musicProgress=progress;
+    this.stereoLed.emissiveIntensity=on?1.6:0;this.stereoLed.color.set(on?'#e8603c':'#5d4733');
+  }
+  private animateStereo(dt: number){
+    const target=this.musicOn?-.45-.17*this.musicProgress():.15;
+    if(this.reduced){this.tonearm.rotation.y=target;return;}
+    this.tonearm.rotation.y+=(target-this.tonearm.rotation.y)*Math.min(1,dt*3);
+    if(this.musicOn)this.platter.rotation.y-=dt*.9;
+    this.cones.forEach((cone,i)=>{const pulse=this.musicOn?Math.abs(Math.sin(this.time*8.5+i*1.3))*.07:0;cone.scale.set(1+pulse,1,1+pulse);});
   }
   private buildAC(){
     const m=this.m;const g=this.group(-3.88,2.98,-.3);g.rotation.y=Math.PI/2;
@@ -474,14 +520,14 @@ export class Room {
     return on;
   }
   private frame(){
-    const now=performance.now();this.time=this.clock.getElapsedTime();
+    const now=performance.now();const last=this.time;this.time=this.clock.getElapsedTime();const dt=Math.min(.1,this.time-last);
     for(let i=this.tweens.length-1;i>=0;i--){const t=this.tweens[i];const p=t.duration===0?1:Math.min(1,(now-t.start)/t.duration);t.update(ease(p));if(p===1){this.tweens.splice(i,1);t.resolve();}}
     if(!this.reduced){
       if(this.walking){const step=Math.sin(this.time*12);this.legs[0].rotation.x=step*.43;this.legs[1].rotation.x=-step*.43;this.arms[0].rotation.x=-step*.35;this.arms[1].rotation.x=step*.35;this.avatar.position.y=Math.abs(step)*.035;}
       else if(this.seated&&!this.waving){this.arms[0].rotation.x=-.72+Math.sin(this.time*6)*.045;this.arms[1].rotation.x=-.72+Math.cos(this.time*7)*.035;this.head.rotation.x=Math.sin(this.time*.8)*.025;}
       this.torso.scale.y=1+Math.sin(this.time*1.8)*.006;
     }
-    this.applyCord();
+    this.applyCord();this.animateStereo(dt);
     const owner=Date.now()/1000+ownerTime.offsetMinutes*60;
     this.clockHands.second.rotation.z=-(owner%60)/60*TAU;this.clockHands.minute.rotation.z=-(owner/60%60)/60*TAU;this.clockHands.hour.rotation.z=-(owner/3600%12)/12*TAU;
     if(this.controls.enabled)this.controls.update();

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ChangeEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ownerTime, profile, socials } from './data/profile';
 import { MusicPlayer } from './lib/music';
 import { Room, type PanelType, type RoomAction } from './lib/room';
@@ -7,6 +7,7 @@ import { Header } from './components/Header';
 import { Intro } from './components/Intro';
 import { RoomStage } from './components/RoomStage';
 import { MiniPlayer } from './components/MiniPlayer';
+import { RecordPlayer } from './components/RecordPlayer';
 import { RoomDock } from './components/RoomDock';
 import { ExploreHint } from './components/ExploreHint';
 import { Footer } from './components/Footer';
@@ -55,7 +56,6 @@ export function App() {
   const closeRef = useRef<HTMLButtonElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const labelRefs = useRef<HTMLElement[]>([]);
-  const fileRef = useRef<HTMLInputElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>();
 
@@ -123,17 +123,12 @@ export function App() {
     try { await roomRef.current?.openDrawer(i); setProjectIndex(i); setStatus(`Drawer 0${i + 1} · ${profile.projects[i].title || 'room for something good'}.`); } finally { busy.current = false; }
   };
 
-  const onFile = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    audioAction(() => player.upload(file));
-    e.target.value = '';
-  };
-
   useLayoutEffect(() => {
     document.body.classList.toggle('night', night);
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', night ? '#202a28' : '#f3f1e9');
   }, [night]);
   useLayoutEffect(() => { document.body.classList.toggle('playing', player.playing); });
+  useEffect(() => { roomRef.current?.setMusic(player.playing, () => player.progress()); }, [player, player.playing]);
 
   useEffect(() => {
     if (!openPanel) return;
@@ -187,7 +182,7 @@ export function App() {
       case 'stack': return <StackPanel />;
       case 'about': return <AboutPanel outfitDay={outfitDay} onWave={async () => { await roomRef.current?.wave(); toast('Hey there. Make yourself at home.'); }} onBack={() => dialogRef.current?.close()} />;
       case 'wardrobe': return <WardrobePanel outfitDay={outfitDay} onPick={day => { outfitPreview.current = true; setOutfitDay(day); }} onToday={() => { outfitPreview.current = false; setOutfitDay(new Date().getDay()); }} />;
-      case 'music': return <MusicPanel player={player} audioAction={audioAction} onVolume={value => { player.setVolume(value); storage.set('inside-volume', player.volume); }} onChooseFile={() => fileRef.current?.click()} />;
+      case 'music': return <MusicPanel player={player} audioAction={audioAction} onVolume={value => { player.setVolume(value); storage.set('inside-volume', player.volume); }} />;
       case 'contact': return <ContactPanel />;
     }
   };
@@ -223,7 +218,7 @@ export function App() {
         {panelContent()}
       </DetailDialog>
       <Toast message={toastState.message} visible={toastState.visible} />
-      <input ref={fileRef} type="file" accept="audio/*" hidden onChange={onFile} />
+      <RecordPlayer player={player} />
     </>
   );
 }

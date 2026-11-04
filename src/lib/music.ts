@@ -1,23 +1,48 @@
-import { tracks } from '../data/tracks';
+import { playlist } from '../data/profile';
 
-export const CUSTOM_TRACK = 3;
+// YT.PlayerState values.
+const ENDED = 0, PLAYING = 1, PAUSED = 2, BUFFERING = 3;
+// 100: removed or private, 101/150: the owner disabled embedding.
+const UNPLAYABLE = new Set([100, 101, 150]);
 
+let apiPromise: Promise<void> | undefined;
+function loadApi(): Promise<void> {
+  if (window.YT?.Player) return Promise.resolve();
+  return apiPromise ??= new Promise<void>((resolve, reject) => {
+    const fail = (message: string) => { clearTimeout(timer); apiPromise = undefined; reject(new Error(message)); };
+    const timer = setTimeout(() => fail('YouTube took too long to answer.'), 10000);
+    const previous = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { clearTimeout(timer); previous?.(); resolve(); };
+    const script = document.createElement('script');
+    script.src = 'https://www.youtube.com/iframe_api';
+    script.async = true;
+    script.onerror = () => fail('YouTube is blocked on this network or by an extension.');
+    document.head.appendChild(script);
+  });
+}
+
+export interface TrackInfo { title: string; author: string }
+export type PlayerStatus = 'idle' | 'loading' | 'ready' | 'unavailable';
+
+/** The record player: a YouTube playlist driven through the IFrame API, exposed as a tiny external store. */
 export class MusicPlayer {
   index = 0;
   playing = false;
+  /** True once anything has played; before that the UI invites a first play. */
+  started = false;
+  /** A play was asked for but YouTube hasn't produced sound yet (buffering, or blocked). */
+  waiting = false;
   volume = .35;
-  customTitle = '';
-  audio?: HTMLAudioElement;
+  shuffle = false;
+  status: PlayerStatus = 'idle';
+  ids: string[] = [];
   onError?: (message: string) => void;
-  private step = 0;
-  private nextAt = 0;
-  private voices = new Set<OscillatorNode>();
-  private timer: ReturnType<typeof setInterval> | null = null;
-  private context?: AudioContext;
-  private gain?: GainNode;
-  private delay?: DelayNode;
-  private feedback?: GainNode;
-  private fileUrl?: string;
+  private yt?: YT.Player;
+  private ready?: Promise<void>;
+  private info = new Map<string, TrackInfo>();
+  private requested = new Set<string>();
+  private skips = 0;
+  private stallTimer?: ReturnType<typeof setTimeout>;
   private listeners = new Set<() => void>();
   private version = 0;
 
@@ -26,51 +51,97 @@ export class MusicPlayer {
   getSnapshot = () => this.version;
   private onChange() { this.version++; this.listeners.forEach(l => l()); }
 
-  async init(){
-    if(!this.context){
-      const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if(!AudioContextClass)throw new Error('This browser does not support generated audio. Try a local audio file.');
-      this.context=new AudioContextClass();this.gain=this.context.createGain();this.gain.gain.value=this.volume*.35;this.gain.connect(this.context.destination);
-      this.delay=this.context.createDelay(2);this.delay.delayTime.value=.46;this.feedback=this.context.createGain();this.feedback.gain.value=.23;this.delay.connect(this.feedback);this.feedback.connect(this.delay);this.delay.connect(this.gain);
+  /** Create the YouTube player inside `el`. The element is replaced by the iframe, so pass one React doesn't own. */
+  mount(el: HTMLElement) {
+    if (this.ready) return this.ready;
+    this.status = 'loading'; this.onChange();
+    this.ready = loadApi()
+      .then(() => new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('The YouTube player did not start.')), 15000);
+        this.yt = new YT.Player(el, {
+          width: 200, height: 200,
+          playerVars: { listType: 'playlist', list: playlist.id, controls: 0, playsinline: 1, rel: 0, disablekb: 1, iv_load_policy: 3, fs: 0, origin: location.origin },
+          events: {
+            onReady: () => { clearTimeout(timer); this.yt!.setVolume(this.volume * 100); this.status = 'ready'; this.sync(); resolve(); },
+            onStateChange: e => this.onState(e.data),
+            onError: e => this.onPlayerError(e.data),
+          },
+        });
+      }))
+      .catch(() => { this.status = 'unavailable'; this.yt = undefined; this.onChange(); });
+    return this.ready;
+  }
+
+  private async player() {
+    await this.ready;
+    if (!this.yt) throw new Error('Couldn’t reach YouTube. Open the playlist on YouTube Music instead.');
+    return this.yt;
+  }
+  async play() { const yt = await this.player(); this.expectSound(); yt.playVideo(); }
+  pause() { this.clearStall(); this.yt?.pauseVideo(); }
+  async toggle() { if (this.playing) this.pause(); else await this.play(); }
+  async select(index: number) { if (index === this.index && this.started) return this.toggle(); const yt = await this.player(); this.expectSound(); yt.playVideoAt(index); }
+  async next(direction = 1) { const yt = await this.player(); this.expectSound(); if (direction > 0) yt.nextVideo(); else yt.previousVideo(); }
+  async setShuffle(on: boolean) { const yt = await this.player(); yt.setShuffle(on); this.shuffle = on; this.sync(); }
+  setVolume(value: number) { this.volume = value; this.yt?.setVolume(value * 100); this.onChange(); }
+
+  /** Watch for a play request that never turns into sound, which is what an ad blocker or embed block looks like. */
+  private expectSound() {
+    this.clearStall(); this.waiting = true; this.onChange();
+    this.stallTimer = setTimeout(() => {
+      this.waiting = false; this.playing = false; this.onChange();
+      this.onError?.('YouTube isn’t playing. An ad blocker or browser shield may be blocking it — try allowing this site.');
+    }, 9000);
+  }
+  private clearStall() { clearTimeout(this.stallTimer); this.stallTimer = undefined; this.waiting = false; }
+
+  private onState(state: number) {
+    // Only real playback counts as playing, so the record never spins in silence.
+    // UNSTARTED, CUED and BUFFERING fire between tracks and leave the current state alone.
+    if (state === PLAYING) { this.clearStall(); this.playing = true; this.started = true; this.skips = 0; }
+    else if (state === PAUSED || state === ENDED) { this.clearStall(); this.playing = false; }
+    else if (state === BUFFERING && !this.waiting && !this.playing) this.waiting = true;
+    this.sync();
+  }
+  private onPlayerError(code: number) {
+    if (UNPLAYABLE.has(code) && this.skips < Math.max(3, this.ids.length)) {
+      this.skips++;
+      this.onError?.('Skipped a track that can’t play outside YouTube.');
+      this.yt?.nextVideo();
+      return;
     }
-    await this.context.resume();
+    this.playing = false; this.onChange();
+    this.onError?.('That track couldn’t play here.');
   }
-  async play(){
-    if(this.index===CUSTOM_TRACK&&this.audio){this.audio.volume=this.volume;await this.audio.play();}
-    else {await this.init();this.nextAt=this.context!.currentTime+.03;this.schedule();this.timer=setInterval(()=>this.schedule(),150);}
-    this.playing=true;this.onChange();
-  }
-  async toggle(){if(this.playing)this.pause();else await this.play();}
-  pause(){
-    if(this.timer)clearInterval(this.timer);this.timer=null;if(this.audio)this.audio.pause();
-    for(const voice of this.voices){try{voice.stop();}catch{}}this.voices.clear();
-    if(this.context)this.context.suspend();this.playing=false;this.onChange();
-  }
-  async select(index: number){this.pause();this.index=index;this.step=0;await this.play();}
-  async next(direction=1){const count=this.audio?4:3;await this.select((this.index+direction+count)%count);}
-  setVolume(value: number){this.volume=value;if(this.gain&&this.context)this.gain.gain.setTargetAtTime(value*.35,this.context.currentTime,.05);if(this.audio)this.audio.volume=value;this.onChange();}
-  private schedule(){
-    const track=tracks[this.index];const context=this.context;if(!track||!context)return;
-    while(this.nextAt<context.currentTime+.4){
-      const midi=track.notes[this.step%track.notes.length];this.note(midi,this.nextAt,2.6,.24);
-      if(this.step%4===0)this.note(midi-12,this.nextAt,3.6,.25);
-      if(this.step%2===0)this.note(midi+12,this.nextAt+.22,1.8,.06);
-      this.step++;this.nextAt+=60/track.bpm*.75;
+  private sync() {
+    const yt = this.yt;
+    if (yt) {
+      this.ids = yt.getPlaylist() ?? this.ids;
+      this.index = Math.max(0, yt.getPlaylistIndex());
+      const data = yt.getVideoData();
+      if (data?.video_id && data.title) this.info.set(data.video_id, { title: data.title, author: data.author });
     }
+    this.onChange();
   }
-  private note(midi: number,time: number,duration: number,volume: number){
-    const context=this.context!;
-    const oscillator=context.createOscillator(),envelope=context.createGain();
-    oscillator.type='sine';oscillator.frequency.value=440*Math.pow(2,(midi-69)/12);
-    envelope.gain.setValueAtTime(0,time);envelope.gain.linearRampToValueAtTime(volume,time+.03);envelope.gain.exponentialRampToValueAtTime(.001,time+duration);
-    oscillator.connect(envelope);envelope.connect(this.gain!);envelope.connect(this.delay!);oscillator.start(time);oscillator.stop(time+duration+.1);this.voices.add(oscillator);oscillator.onended=()=>{this.voices.delete(oscillator);oscillator.disconnect();envelope.disconnect();};
+
+  /** Title and channel for a video; fetched once through oEmbed (CORS-enabled) and cached. */
+  track(id: string | undefined): TrackInfo | undefined {
+    if (!id) return undefined;
+    const known = this.info.get(id);
+    if (known || this.requested.has(id)) return known;
+    this.requested.add(id);
+    fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}&format=json`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then((d: { title: string; author_name: string }) => { this.info.set(id, { title: d.title, author: d.author_name }); this.onChange(); })
+      .catch(() => {});
+    return undefined;
   }
-  async upload(file?: File){
-    if(!file)return;if(file.size>100*1024*1024)throw new Error('Choose an audio file smaller than 100 MB.');
-    this.pause();if(this.audio)this.audio.src='';if(this.fileUrl)URL.revokeObjectURL(this.fileUrl);
-    this.fileUrl=URL.createObjectURL(file);this.audio=new Audio(this.fileUrl);this.audio.loop=true;this.customTitle=file.name.replace(/\.[^.]+$/,'');
-    this.audio.addEventListener('error',()=>{this.pause();this.onError?.('This audio format could not be played. Try an MP3, WAV, or OGG file.');});
-    this.index=CUSTOM_TRACK;this.step=0;await this.play();
-  }
-  get title(){return this.index===CUSTOM_TRACK?this.customTitle:tracks[this.index].title;}
+  get current() { return this.ids[this.index]; }
+  get title() { return this.track(this.current)?.title ?? ''; }
+  get author() { return this.track(this.current)?.author ?? ''; }
+  /** 0–1 through the current track. */
+  progress() { const d = this.yt?.getDuration() ?? 0; return d > 0 ? Math.min(1, (this.yt!.getCurrentTime() ?? 0) / d) : 0; }
+  time() { return { now: this.yt?.getCurrentTime() ?? 0, total: this.yt?.getDuration() ?? 0 }; }
 }
+
+export const thumbnail = (id: string, quality: 'mqdefault' | 'hqdefault' | 'maxresdefault' = 'mqdefault') => `https://i.ytimg.com/vi/${id}/${quality}.jpg`;

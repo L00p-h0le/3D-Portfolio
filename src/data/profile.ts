@@ -12,6 +12,7 @@ export interface Profile {
 }
 
 export const socials = { github: 'https://github.com/L00p-h0le', twitter: 'https://x.com/G3ek_God' };
+export const playlist = { id: 'PLlYm1svwFJCETsZCv1RwvmXJCLEJZGJNJ', name: 'Vibe 🎧', url: 'https://music.youtube.com/playlist?list=PLlYm1svwFJCETsZCv1RwvmXJCLEJZGJNJ' };
 // The wall clock shows the owner's time, not the visitor's. IST has no daylight saving, so a fixed offset is exact.
 export const ownerTime = { zone: 'Asia/Kolkata', label: 'India', offsetMinutes: 330 };
 
