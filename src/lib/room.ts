@@ -2,18 +2,18 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { outfits } from '../data/outfits';
-import { ownerTime } from '../data/profile';
+import { ownerTime, profile } from '../data/profile';
 
-export type RoomAction = 'projects' | 'stack' | 'about' | 'music' | 'wardrobe' | 'curtains' | 'ac' | 'bed' | 'github' | 'twitter' | 'clock';
-export type PanelType = 'projects' | 'stack' | 'about' | 'music' | 'wardrobe' | 'contact';
+export type RoomAction = 'desktop' | 'todo' | 'drawer' | 'about' | 'music' | 'wardrobe' | 'curtains' | 'ac' | 'bed' | 'github' | 'twitter' | 'clock';
+export type PanelType = 'desktop' | 'todo' | 'about' | 'music' | 'wardrobe' | 'contact';
 type Vec3 = [number, number, number];
 type MaterialName = 'wood'|'darkWood'|'floor'|'wall'|'trim'|'cream'|'green'|'darkGreen'|'curtain'|'black'|'metal'|'gold'|'white'|'terracotta'|'soil'|'leaf'|'skin'|'hair'|'pants'|'shirt'|'screen';
 interface Tween { start: number; duration: number; update: (t: number) => void; resolve: () => void }
 
 // Hotspot labels rendered by React; the room projects them into place every frame.
 export const HOTSPOTS: { action: RoomAction; label: string; point: Vec3; num: string }[] = [
-  { action:'projects', label:'The projects', point:[-2.8,1.9,.52], num:'01' },
-  { action:'stack', label:'The workbench', point:[-.65,2.5,-2.2], num:'02' },
+  { action:'desktop', label:'The desktop', point:[-.65,2.5,-2.2], num:'01' },
+  { action:'todo', label:'On my list', point:[-3.2,1.95,.19], num:'02' },
   { action:'curtains', label:'Pull the cord', point:[2.84,3.72,-3.3], num:'☼' },
   { action:'music', label:'Good company', point:[2.35,1.45,-2.6], num:'♪' },
   { action:'wardrobe', label:'A different day', point:[-3.05,3.28,-2.3], num:'↻' },
@@ -229,13 +229,7 @@ export class Room {
     this.box(1.25,.77,.075,m.black,0,0,0,mon,.04);
     this.box(1.14,.65,.012,m.screen,0,.015,.047,mon,.01);
     this.box(.07,.25,.07,m.black,0,-.46,-.02,mon);this.box(.4,.025,.25,m.black,0,-.56,0,mon);
-    const screenCanvas=document.createElement('canvas');screenCanvas.width=640;screenCanvas.height=360;const c=screenCanvas.getContext('2d')!;
-    c.fillStyle='#233b35';c.fillRect(0,0,640,360);c.fillStyle='#344b40';c.fillRect(0,0,640,32);
-    for(let i=0;i<3;i++){c.fillStyle=['#d7997a','#d4c487','#9ab793'][i];c.beginPath();c.arc(18+i*18,16,4,0,TAU);c.fill();}
-    c.fillStyle='#dce7c9';c.font='20px monospace';c.fillText('a little curiosity,',40,100);c.fillText('a lot of possibilities.',40,132);
-    const lines=['const life = {','  build: somethingMeaningful,','  learn: everyDay,','  coffee: true','};'];
-    lines.forEach((line,i)=>{c.fillStyle=i===0||i===4?'#9cc2a5':'#d3c694';c.font='15px monospace';c.fillText(line,40,190+i*25);});
-    const tex=new THREE.CanvasTexture(screenCanvas);tex.colorSpace=THREE.SRGBColorSpace;
+    const tex=this.desktopTexture();
     const display=new THREE.Mesh(new THREE.PlaneGeometry(1.14,.65),new THREE.MeshBasicMaterial({map:tex}));display.position.set(0,.015,.055);mon.add(display);
     this.box(.7,.035,.25,m.cream,.02,1.29,.25,g);
     for(let r=0;r<4;r++)for(let i=0;i<11;i++)this.box(.045,.008,.04,i===0?m.green:m.white,-.28+i*.055,1.313,.16+r*.055,g,.004);
@@ -244,7 +238,7 @@ export class Room {
     const handle=new THREE.Mesh(new THREE.TorusGeometry(.065,.016,8,16),m.terracotta);handle.position.set(-.82,1.36,.3);g.add(handle);
     this.cylinder(.14,.15,.025,m.darkGreen,-1.03,1.28,-.32,g);this.cylinder(.016,.016,.5,m.darkGreen,-1.03,1.52,-.32,g);
     this.cylinder(.09,.24,.23,m.green,-1.03,1.85,-.32,g);this.cylinder(.19,.19,.018,m.cream,-1.03,1.73,-.32,g);
-    this.interactive(g,'stack');
+    this.interactive(g,'desktop');
     // Swivel chair, upholstered with a five-point base.
     this.chair=this.group(-.75,0,-1.35);
     this.box(.65,.13,.64,m.darkGreen,0,.66,0,this.chair,.09);
@@ -267,13 +261,72 @@ export class Room {
       this.box(1.32,.05,.92,m.darkWood,0,-.13,.02,drawer);
       for(const x of [-.65,.65])this.box(.04,.24,.92,m.darkWood,x,0,.02,drawer);
       this.box(.28,.035,.04,m.gold,0,0,.613,drawer);
-      // Blank folios awaiting the owner's projects.
-      this.box(.76,.04,.57,m.cream,.06,-.08,.05,drawer);
-      this.interactive(drawer,'projects',i);
+      // Empty for now; something new will live in here.
+      this.interactive(drawer,'drawer',i);
     }
-    const book=this.box(.43,.06,.3,m.darkGreen,.37,1.51,.06,g);book.rotation.y=.12;
-    this.box(.4,.045,.28,m.cream,.36,1.56,.06,g);
-    this.interactive(g.children[4],'projects',0);
+    this.buildNotepad(g);
+  }
+  /** The monitor's wallpaper: a tiny desktop hinting at the full one that opens on click. */
+  private desktopTexture(){
+    const W=640,H=360;const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;const c=canvas.getContext('2d')!;
+    const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=this.renderer.capabilities.getMaxAnisotropy();
+    const round=(x: number,y: number,w: number,h: number,r: number)=>{c.beginPath();c.roundRect(x,y,w,h,r);};
+    const images: { shot?: HTMLImageElement; wall?: HTMLImageElement }={};
+    const draw=()=>{
+      const {shot,wall}=images;
+      c.fillStyle='#ffffff';c.fillRect(0,0,W,H);
+      if(wall){const k=Math.max(W/wall.width,H/wall.height);c.drawImage(wall,(W-wall.width*k)/2,(H-wall.height*k)/2,wall.width*k,wall.height*k);}
+      c.fillStyle='#ffffffd9';c.fillRect(0,0,W,24);c.fillStyle='#1c1c1c';c.font='bold 12px sans-serif';c.textBaseline='middle';c.fillText('inside.os',14,12);
+      c.font='12px sans-serif';c.textAlign='right';c.fillText(profile.name||'',W-14,12);c.textAlign='left';
+      // Project folders and the stack app, down the left edge.
+      const apps=[...profile.projects.map(p=>p.title||'Project'),'Stack'];
+      apps.forEach((label,i)=>{
+        const x=26,y=44+i*72;
+        if(i<apps.length-1){c.fillStyle='#e8c780';round(x,y,20,10,3);c.fill();c.fillStyle='#d9b26a';round(x,y+6,46,34,5);c.fill();}
+        else{c.fillStyle='#9ab793';round(x+3,y,40,40,9);c.fill();c.fillStyle='#233b35';c.font='bold 18px monospace';c.textAlign='center';c.fillText('{}',x+23,y+21);c.textAlign='left';}
+        c.fillStyle='#1c1c1c';c.font='11px sans-serif';c.textAlign='center';c.fillText(label,x+23,y+54);c.textAlign='left';
+      });
+      // An open window showing the first project.
+      const wx=150,wy=48,ww=400,wh=240;
+      c.fillStyle='#0000002a';round(wx+4,wy+8,ww,wh,10);c.fill();
+      c.fillStyle='#f3f1e9';round(wx,wy,ww,wh,10);c.fill();
+      ['#e0705a','#e3b75a','#7fae6c'].forEach((col,i)=>{c.fillStyle=col;c.beginPath();c.arc(wx+16+i*15,wy+14,4.5,0,TAU);c.fill();});
+      c.fillStyle='#303b32';c.font='bold 12px sans-serif';c.fillText(profile.projects[0]?.title||'',wx+66,wy+15);
+      if(shot){c.save();round(wx+10,wy+30,ww-20,wh-40,6);c.clip();const k=Math.max((ww-20)/shot.width,(wh-40)/shot.height);c.drawImage(shot,wx+10,wy+30,shot.width*k,shot.height*k);c.restore();}
+      else{c.fillStyle='#dcded2';round(wx+10,wy+30,ww-20,wh-40,6);c.fill();}
+      // Dock.
+      c.fillStyle='#0000001a';round(W/2-110,H-36,220,28,9);c.fill();
+      ['#d9b26a','#d9b26a','#d9b26a','#9ab793','#c8693f'].forEach((col,i)=>{c.fillStyle=col;round(W/2-96+i*40,H-31,20,18,5);c.fill();});
+      tex.needsUpdate=true;
+    };
+    draw();
+    const load=(key: 'shot'|'wall',src?: string)=>{if(!src)return;const img=new Image();img.onload=()=>{images[key]=img;draw();};img.src=src;};
+    load('shot',profile.projects[0]?.image);load('wall','desktop/wallpaper.jpg');
+    return tex;
+  }
+  /** Spiral notepad on top of the drawers listing what's being built right now. */
+  private buildNotepad(parent: THREE.Group){
+    const m=this.m;const pad=this.group(.3,1.48,.04,parent);pad.rotation.y=-.1;pad.scale.setScalar(1.3);
+    this.box(.38,.03,.48,m.cream,0,.015,0,pad,.006);
+    const canvas=document.createElement('canvas');canvas.width=512;canvas.height=640;const c=canvas.getContext('2d')!;
+    c.fillStyle='#f6f1df';c.fillRect(0,0,512,640);
+    c.strokeStyle='#8aa3b8';c.lineWidth=3;for(let y=150;y<640;y+=58){c.beginPath();c.moveTo(0,y);c.lineTo(512,y);c.stroke();}
+    c.strokeStyle='#d98a7a';c.lineWidth=3;c.beginPath();c.moveTo(72,0);c.lineTo(72,640);c.stroke();
+    const hand='"Segoe Print","Bradley Hand","Comic Sans MS",cursive';
+    c.fillStyle='#1d3a2d';c.font=`bold 70px ${hand}`;c.fillText('TO DO',96,112);
+    profile.todo.slice(0,8).forEach((item,i)=>{
+      const y=136+(i+1)*58;c.strokeStyle='#2f4a3e';c.lineWidth=3;c.strokeRect(92,y-34,26,26);
+      if(item.done){c.beginPath();c.moveTo(96,y-22);c.lineTo(104,y-12);c.lineTo(118,y-38);c.stroke();}
+      c.fillStyle=item.task?'#1d3a2d':'#7d8070';c.font=`bold ${item.task?36:32}px ${hand}`;c.fillText(item.task||'to be added…',134,y-8,360);
+    });
+    const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=this.renderer.capabilities.getMaxAnisotropy();
+    const sheet=new THREE.Mesh(new THREE.PlaneGeometry(.36,.45),new THREE.MeshStandardMaterial({map:tex,roughness:.95}));
+    sheet.rotation.x=-Math.PI/2;sheet.position.y=.032;sheet.receiveShadow=true;pad.add(sheet);
+    for(let i=0;i<10;i++){const ring=new THREE.Mesh(new THREE.TorusGeometry(.016,.003,6,16),m.metal);ring.rotation.y=Math.PI/2;ring.position.set(-.15+i*.033,.035,-.232);pad.add(ring);}
+    const pencil=this.group(.25,.012,.02,pad);pencil.rotation.y=.25;
+    const body=this.cylinder(.009,.009,.26,this.material('#e3b75a'),0,0,0,pencil,6);body.rotation.x=Math.PI/2;
+    const tip=this.cylinder(0,.009,.03,this.material('#e8d3ab'),0,0,.145,pencil,6);tip.rotation.x=Math.PI/2;
+    this.interactive(pad,'todo');
   }
   private buildBed(){
     const m=this.m;const g=this.group(2.55,0,.68);
@@ -472,13 +525,14 @@ export class Room {
     await this.tween(.45,t=>{d.position.z=THREE.MathUtils.lerp(start,.65,t);this.arms[0].rotation.x=-.6*Math.sin(t*Math.PI);});
   }
   async visit(action: RoomAction,index=0){
-    if(action==='stack'){await this.resetCamera();await this.focusCamera();return;}
+    if(action==='desktop'){await this.resetCamera();await this.focusCamera(new THREE.Vector3(-.75,1.84,-2.76),2.6);return;}
     if(action==='about'){await this.wave();return;}
     await this.stand();await this.walkTo(-.45,.35);
     if(action==='curtains'){await this.walkTo(...CORD.aisle);await this.walkTo(...CORD.stand);this.avatar.rotation.y=Math.PI;await this.pullCord();return;}
-    const dest: Partial<Record<RoomAction,[number,number]>>={projects:[-1.55,.52],music:[1.3,-1.65],wardrobe:[-2.8,-1.2]};
-    const to=dest[action];if(to)await this.walkTo(...to);this.avatar.rotation.y=action==='projects'?-Math.PI/2:Math.PI;
-    if(action==='projects')await this.openDrawer(index);
+    const dest: Partial<Record<RoomAction,[number,number]>>={drawer:[-1.55,.52],todo:[-1.55,.52],music:[1.3,-1.65],wardrobe:[-2.8,-1.2]};
+    const to=dest[action];if(to)await this.walkTo(...to);this.avatar.rotation.y=action==='drawer'||action==='todo'?-Math.PI/2:Math.PI;
+    if(action==='drawer')await this.openDrawer(index);
+    if(action==='todo')await this.focusCamera(new THREE.Vector3(-3.0,1.5,.22),3.4,new THREE.Vector3(3.6,6.3,8));
     if(action==='wardrobe'){await this.tween(.5,t=>{this.closetDoors[0].rotation.y=-t*1.1;this.closetDoors[1].rotation.y=t*1.1;});this.wardrobeOpen=true;}
   }
   async home(){
@@ -496,9 +550,9 @@ export class Room {
       this.windowMaterial.color.set('#d8e3d6').lerp(new THREE.Color('#536e84'),v);this.windowMaterial.emissiveIntensity=.35-v*.2;
     });
   }
-  private async focusCamera(){
+  private async focusCamera(focus=new THREE.Vector3(-.7,1.55,-2.1),toZoom=1.75,toPos=new THREE.Vector3(3,5,8)){
     this.controls.enabled=false;const start=this.camera.position.clone(),target=this.controls.target.clone(),zoom=this.camera.zoom;
-    await this.tween(.8,t=>{this.camera.position.lerpVectors(start,new THREE.Vector3(3,5,8),t);this.controls.target.lerpVectors(target,new THREE.Vector3(-.7,1.55,-2.1),t);this.camera.zoom=THREE.MathUtils.lerp(zoom,1.75,t);this.camera.updateProjectionMatrix();this.camera.lookAt(this.controls.target);});
+    await this.tween(.8,t=>{this.camera.position.lerpVectors(start,toPos,t);this.controls.target.lerpVectors(target,focus,t);this.camera.zoom=THREE.MathUtils.lerp(zoom,toZoom,t);this.camera.updateProjectionMatrix();this.camera.lookAt(this.controls.target);});
   }
   private async resetCamera(){
     this.controls.enabled=false;const pos=this.camera.position.clone(),target=this.controls.target.clone(),zoom=this.camera.zoom;

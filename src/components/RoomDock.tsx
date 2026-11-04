@@ -2,8 +2,8 @@ import { Icon, type IconName } from './Icon';
 import type { PanelType } from '../lib/room';
 
 const ITEMS: { action: PanelType; icon: IconName; label: string; key: string }[] = [
-  { action:'projects', icon:'drawer', label:'Projects', key:'1' },
-  { action:'stack', icon:'monitor', label:'My stack', key:'2' },
+  { action:'desktop', icon:'monitor', label:'Desktop', key:'1' },
+  { action:'todo', icon:'note', label:'To-do', key:'2' },
   { action:'about', icon:'person', label:'About me', key:'3' },
   { action:'music', icon:'music', label:'The playlist', key:'4' },
   { action:'wardrobe', icon:'shirt', label:'Wardrobe', key:'5' },

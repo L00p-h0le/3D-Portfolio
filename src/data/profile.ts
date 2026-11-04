@@ -1,5 +1,6 @@
 export interface ProfileLink { label: string; url: string }
 export interface StackItem { name: string; category: string }
+export interface TodoItem { task: string; note?: string; done?: boolean }
 export interface Project { title: string; description: string; tags: string[]; url: string; image: string }
 export interface Profile {
   name: string;
@@ -9,6 +10,7 @@ export interface Profile {
   links: ProfileLink[];
   stack: StackItem[];
   projects: Project[];
+  todo: TodoItem[];
 }
 
 export const socials = { github: 'https://github.com/L00p-h0le', twitter: 'https://x.com/G3ek_God' };
@@ -58,5 +60,12 @@ export const profile: Profile = {
       url: 'https://geek-blue.vercel.app',
       image: 'projects/g33k.png',
     },
+  ],
+  // The notepad on the drawers: what you're building right now. Empty tasks show as "To be added".
+  // e.g. { task: 'UNIDEX v2', note: 'concentrated liquidity', done: false }
+  todo: [
+    { task: '' },
+    { task: '' },
+    { task: '' },
   ],
 };

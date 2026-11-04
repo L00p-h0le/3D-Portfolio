@@ -22,6 +22,10 @@
   @keyframes pulse-dots { 50% { opacity: .2 } }
   @keyframes spin-record { to { transform: rotate(360deg) } }
   @keyframes equalizer { to { height: 3px } }
+  --animate-os-in: os-in .5s cubic-bezier(.2,.8,.2,1);
+  --animate-win-in: win-in .22s ease-out;
+  @keyframes os-in { from { opacity: 0; transform: scale(.94); filter: blur(6px) } }
+  @keyframes win-in { from { opacity: 0; transform: translateY(10px) scale(.98) } }
 }
 
 /* Same specificity as the original `body.night .x` / `.playing .x` selectors. */
