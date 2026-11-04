@@ -15,16 +15,15 @@ import { Toast } from './components/Toast';
 import { DetailDialog } from './components/DetailDialog';
 import { TodoPanel } from './components/panels/TodoPanel';
 import { Desktop } from './components/desktop/Desktop';
-import { AboutPanel } from './components/panels/AboutPanel';
 import { WardrobePanel } from './components/panels/WardrobePanel';
 import { MusicPanel } from './components/panels/MusicPanel';
 import { ContactPanel } from './components/panels/ContactPanel';
 
 type Action = RoomAction | PanelType;
 
-const locations: Record<PanelType, string> = { desktop:'THE DESKTOP', todo:'THE NOTEPAD', about:'THE PERSON', music:'THE MUSIC CORNER', wardrobe:'THE CLOSET', contact:'SAY HELLO' };
-const descriptions: Record<Exclude<PanelType, 'contact'>, string> = { desktop:'Booting up the desktop…', todo:'Walking over to the notepad…', about:'A little hello from the desk.', music:'Heading over to the record player…', wardrobe:'Finding something to wear…' };
-const shortcuts: Record<string, PanelType> = { '1':'desktop', '2':'todo', '3':'about', '4':'music', '5':'wardrobe' };
+const locations: Record<PanelType, string> = { desktop:'THE DESKTOP', todo:'THE NOTEPAD', music:'THE MUSIC CORNER', wardrobe:'THE CLOSET', contact:'SAY HELLO' };
+const descriptions: Record<Exclude<PanelType, 'contact'>, string> = { desktop:'Booting up the desktop…', todo:'Walking over to the notepad…', music:'Heading over to the record player…', wardrobe:'Finding something to wear…' };
+const shortcuts: Record<string, PanelType> = { '1':'desktop', '2':'todo', '3':'music', '4':'wardrobe' };
 const restingStatus = (night: boolean) => night ? 'Lights low. Ideas still on.' : 'At the desk, making things.';
 const formatTime = () => new Intl.DateTimeFormat('en', { hour:'2-digit', minute:'2-digit' }).format(new Date()).toUpperCase() + ' LOCAL';
 
@@ -83,6 +82,8 @@ export function App() {
     if (busy.current) { toast('One moment — just getting there.'); return; }
     const room = roomRef.current;
     if (type === 'ac') { const on = room?.toggleAC(); toast(on ? 'A little breeze. AC is on.' : 'Quiet room. AC is off.'); return; }
+    // Clicking the avatar just gets a wave back.
+    if (type === 'about') { toast('Hey there. Make yourself at home.'); await room?.wave(); return; }
     if (type === 'bed') { toast('A reminder to rest. Good ideas need a little sleep, too.'); return; }
     busy.current = true;
     try {
@@ -196,7 +197,6 @@ export function App() {
     switch (shownPanel) {
       case 'desktop': return null;
       case 'todo': return <TodoPanel />;
-      case 'about': return <AboutPanel outfitDay={outfitDay} onWave={async () => { await roomRef.current?.wave(); toast('Hey there. Make yourself at home.'); }} onBack={() => dialogRef.current?.close()} />;
       case 'wardrobe': return <WardrobePanel outfitDay={outfitDay} onPick={day => { outfitPreview.current = true; setOutfitDay(day); }} onToday={() => { outfitPreview.current = false; setOutfitDay(new Date().getDay()); }} />;
       case 'music': return <MusicPanel player={player} audioAction={audioAction} onVolume={value => { player.setVolume(value); storage.set('inside-volume', player.volume); }} />;
       case 'contact': return <ContactPanel />;

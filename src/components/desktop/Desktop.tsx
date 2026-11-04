@@ -92,9 +92,7 @@ export function Desktop({ open, onClose }: { open: boolean; onClose: () => void 
 
       {/* Menu bar */}
       <header className="relative z-20 h-[34px] flex items-center gap-[18px] px-[16px] bg-[#ffffffcc] border-b border-[#0000000f] [backdrop-filter:blur(12px)] text-[12px] text-[#1c1c1c]">
-        <span className="font-semibold">inside.os</span>
         <span className="text-[#1c1c1c99] mobile:hidden">{profile.name}’s desktop</span>
-        {visible.length === 0 && <span className="text-[#1c1c1c80] mobile:hidden">Open an app from the dock</span>}
         <span className="ml-auto tabular-nums text-[#1c1c1cb3]">{time} · {ownerTime.label}</span>
       </header>
 

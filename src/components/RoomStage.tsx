@@ -39,9 +39,8 @@ export function RoomStage({ containerRef, labelRefs, labelsHidden, loading, stat
           ? <><span>The 3D room needs WebGL.</span><span>Use the navigation below to explore the portfolio.</span></>
           : <span>Making room for you<span className="animate-pulse-dots">...</span></span>}
       </div>
-      <div className="absolute bottom-[4px] left-[48%] [transform:translateX(-50%)] whitespace-nowrap text-muted text-[10px] flex items-center gap-[7px] mobile:bottom-[8px] mobile:left-1/2 mobile:text-[9px]">
-        <span className="w-[4px] h-[4px] rounded-full bg-[#8e9d6e]"></span><span role="status">{status}</span>
-      </div>
+      {/* Not shown on screen; screen readers still hear what the room is doing. */}
+      <span className="sr-only" role="status">{status}</span>
       <div className="absolute right-[5%] bottom-0 flex gap-[6px] mobile:right-[7%] mobile:bottom-[32px]">
         <button className={viewButton} title="Reset room view" aria-label="Reset room view" onClick={onReset}>↺</button>
         <button className={viewButton} title="Toggle object labels" aria-label="Toggle object labels" aria-pressed={!labelsHidden} onClick={onToggleLabels}>⌖</button>

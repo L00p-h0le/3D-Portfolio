@@ -5,7 +5,7 @@ import { outfits } from '../data/outfits';
 import { ownerTime, profile } from '../data/profile';
 
 export type RoomAction = 'desktop' | 'todo' | 'drawer' | 'about' | 'music' | 'wardrobe' | 'curtains' | 'ac' | 'bed' | 'github' | 'twitter' | 'clock';
-export type PanelType = 'desktop' | 'todo' | 'about' | 'music' | 'wardrobe' | 'contact';
+export type PanelType = 'desktop' | 'todo' | 'music' | 'wardrobe' | 'contact';
 type Vec3 = [number, number, number];
 type MaterialName = 'wood'|'darkWood'|'floor'|'wall'|'trim'|'cream'|'green'|'darkGreen'|'curtain'|'black'|'metal'|'gold'|'white'|'terracotta'|'soil'|'leaf'|'skin'|'hair'|'pants'|'shirt'|'screen';
 interface Tween { start: number; duration: number; update: (t: number) => void; resolve: () => void }
@@ -276,8 +276,7 @@ export class Room {
       const {wall}=images;
       c.fillStyle='#ffffff';c.fillRect(0,0,W,H);
       if(wall){const k=Math.max(W/wall.width,H/wall.height);c.drawImage(wall,(W-wall.width*k)/2,(H-wall.height*k)/2,wall.width*k,wall.height*k);}
-      c.fillStyle='#ffffffd9';c.fillRect(0,0,W,24);c.fillStyle='#1c1c1c';c.font='bold 12px sans-serif';c.textBaseline='middle';c.fillText('inside.os',14,12);
-      c.font='12px sans-serif';c.textAlign='right';c.fillText(profile.name||'',W-14,12);c.textAlign='left';
+      c.fillStyle='#ffffffd9';c.fillRect(0,0,W,24);c.fillStyle='#1c1c1c';c.font='12px sans-serif';c.textBaseline='middle';c.textAlign='right';c.fillText(profile.name||'',W-14,12);c.textAlign='left';
       // Dock: the Projects folder, the apps with their logos, then Stack, Readme and Say hello.
       const dock: { tile: string; icon?: string }[]=[{tile:'#d9b26a'},...profile.apps.map(a=>({tile:a.tile,icon:a.icon})),{tile:'#9ab793'},{tile:'#f3f1e9'},{tile:'#c8693f'}];
       const dw=dock.length*40+16;
