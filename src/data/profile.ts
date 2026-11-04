@@ -1,6 +1,7 @@
 export interface ProfileLink { label: string; url: string }
 export interface StackItem { name: string; category: string }
 export interface TodoItem { task: string; note?: string; done?: boolean }
+export interface DesktopApp { title: string; kind: string; icon: string; tile: string; hero: string; blurb: string; url: string; stats?: { label: string; value: string; copy?: boolean }[] }
 export interface Project { title: string; description: string; tags: string[]; url: string; image: string }
 export interface Profile {
   name: string;
@@ -11,6 +12,7 @@ export interface Profile {
   stack: StackItem[];
   projects: Project[];
   todo: TodoItem[];
+  apps: DesktopApp[];
 }
 
 export const socials = { github: 'https://github.com/L00p-h0le', twitter: 'https://x.com/G3ek_God' };
@@ -64,8 +66,35 @@ export const profile: Profile = {
   // The notepad on the drawers: what you're building right now. Empty tasks show as "To be added".
   // e.g. { task: 'UNIDEX v2', note: 'concentrated liquidity', done: false }
   todo: [
-    { task: '' },
-    { task: '' },
-    { task: '' },
+    { task: 'Tell Claude to make no mistake' },
+    { task: 'Build MEV-Router' },
+    { task: 'Build 4 components' },
+    { task: 'Revise Web3' },
+    { task: 'Rank push to Asc 2' },
+  ],  // Apps in the desktop's dock. `icon` lives in public/desktop/icons; `tile` is the icon's background and `hero` the window banner.
+  // Stats with `copy: true` get a copy button (handy for game and chat IDs).
+  apps: [
+    {
+      title: 'Valorant', kind: 'Game', icon: 'valorant.svg', tile: '#0f1923', hero: 'from-[#0f1923] via-[#5a1a24] to-[#ff4655]',
+      blurb: 'Five-on-five, one life per round. Where I practise crosshair placement and patience.',
+      url: 'https://playvalorant.com',
+      stats: [{ label: 'Current rank', value: 'Diamond 2' }, { label: 'Peak rank', value: 'Ascendant 2' }, { label: 'Riot ID', value: 'Rabdi #7501', copy: true }],
+    },
+    {
+      title: 'Claude', kind: 'AI assistant', icon: 'claude.svg', tile: '#f5efe6', hero: 'from-[#3a2418] via-[#a8512f] to-[#d97757]',
+      blurb: 'My pair programmer for thinking through designs, reviewing code and writing the boring parts.',
+      url: 'https://claude.ai',
+    },
+    {
+      title: 'Obsidian', kind: 'Notes', icon: 'obsidian.svg', tile: '#1e1e24', hero: 'from-[#14121c] via-[#3b2a6b] to-[#8b5cf6]',
+      blurb: 'Where notes, contract audits and half-finished ideas live, all linked together.',
+      url: 'https://obsidian.md',
+    },
+    {
+      title: 'Discord', kind: 'Chat', icon: 'discord.svg', tile: '#5865f2', hero: 'from-[#1e2050] via-[#4752c4] to-[#5865f2]',
+      blurb: 'Dev communities, Web3 servers and the squad for evening ranked games.',
+      url: 'https://discord.com',
+      stats: [{ label: 'Discord ID', value: 'Prabh@onchain', copy: true }],
+    },
   ],
 };

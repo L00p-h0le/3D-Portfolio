@@ -271,37 +271,27 @@ export class Room {
     const W=640,H=360;const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;const c=canvas.getContext('2d')!;
     const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=this.renderer.capabilities.getMaxAnisotropy();
     const round=(x: number,y: number,w: number,h: number,r: number)=>{c.beginPath();c.roundRect(x,y,w,h,r);};
-    const images: { shot?: HTMLImageElement; wall?: HTMLImageElement }={};
+    const images: { wall?: HTMLImageElement }={};const logos: Record<string,HTMLImageElement>={};
     const draw=()=>{
-      const {shot,wall}=images;
+      const {wall}=images;
       c.fillStyle='#ffffff';c.fillRect(0,0,W,H);
       if(wall){const k=Math.max(W/wall.width,H/wall.height);c.drawImage(wall,(W-wall.width*k)/2,(H-wall.height*k)/2,wall.width*k,wall.height*k);}
       c.fillStyle='#ffffffd9';c.fillRect(0,0,W,24);c.fillStyle='#1c1c1c';c.font='bold 12px sans-serif';c.textBaseline='middle';c.fillText('inside.os',14,12);
       c.font='12px sans-serif';c.textAlign='right';c.fillText(profile.name||'',W-14,12);c.textAlign='left';
-      // Project folders and the stack app, down the left edge.
-      const apps=[...profile.projects.map(p=>p.title||'Project'),'Stack'];
-      apps.forEach((label,i)=>{
-        const x=26,y=44+i*72;
-        if(i<apps.length-1){c.fillStyle='#e8c780';round(x,y,20,10,3);c.fill();c.fillStyle='#d9b26a';round(x,y+6,46,34,5);c.fill();}
-        else{c.fillStyle='#9ab793';round(x+3,y,40,40,9);c.fill();c.fillStyle='#233b35';c.font='bold 18px monospace';c.textAlign='center';c.fillText('{}',x+23,y+21);c.textAlign='left';}
-        c.fillStyle='#1c1c1c';c.font='11px sans-serif';c.textAlign='center';c.fillText(label,x+23,y+54);c.textAlign='left';
+      // Dock: the Projects folder, the apps with their logos, then Stack, Readme and Say hello.
+      const dock: { tile: string; icon?: string }[]=[{tile:'#d9b26a'},...profile.apps.map(a=>({tile:a.tile,icon:a.icon})),{tile:'#9ab793'},{tile:'#f3f1e9'},{tile:'#c8693f'}];
+      const dw=dock.length*40+16;
+      c.fillStyle='#ffffffb3';round(W/2-dw/2,H-52,dw,44,12);c.fill();
+      dock.forEach((d,i)=>{
+        const x=W/2-dw/2+12+i*40,y=H-46;
+        c.fillStyle=d.tile;round(x,y,32,32,8);c.fill();
+        const img=d.icon&&logos[d.icon];if(img)c.drawImage(img,x+7,y+7,18,18);
       });
-      // An open window showing the first project.
-      const wx=150,wy=48,ww=400,wh=240;
-      c.fillStyle='#0000002a';round(wx+4,wy+8,ww,wh,10);c.fill();
-      c.fillStyle='#f3f1e9';round(wx,wy,ww,wh,10);c.fill();
-      ['#e0705a','#e3b75a','#7fae6c'].forEach((col,i)=>{c.fillStyle=col;c.beginPath();c.arc(wx+16+i*15,wy+14,4.5,0,TAU);c.fill();});
-      c.fillStyle='#303b32';c.font='bold 12px sans-serif';c.fillText(profile.projects[0]?.title||'',wx+66,wy+15);
-      if(shot){c.save();round(wx+10,wy+30,ww-20,wh-40,6);c.clip();const k=Math.max((ww-20)/shot.width,(wh-40)/shot.height);c.drawImage(shot,wx+10,wy+30,shot.width*k,shot.height*k);c.restore();}
-      else{c.fillStyle='#dcded2';round(wx+10,wy+30,ww-20,wh-40,6);c.fill();}
-      // Dock.
-      c.fillStyle='#0000001a';round(W/2-110,H-36,220,28,9);c.fill();
-      ['#d9b26a','#d9b26a','#d9b26a','#9ab793','#c8693f'].forEach((col,i)=>{c.fillStyle=col;round(W/2-96+i*40,H-31,20,18,5);c.fill();});
       tex.needsUpdate=true;
     };
     draw();
-    const load=(key: 'shot'|'wall',src?: string)=>{if(!src)return;const img=new Image();img.onload=()=>{images[key]=img;draw();};img.src=src;};
-    load('shot',profile.projects[0]?.image);load('wall','desktop/wallpaper.jpg');
+    const wall=new Image();wall.onload=()=>{images.wall=wall;draw();};wall.src='desktop/wallpaper.jpg';
+    profile.apps.forEach(a=>{const img=new Image();img.onload=()=>{logos[a.icon]=img;draw();};img.src=`desktop/icons/${a.icon}`;});
     return tex;
   }
   /** Spiral notepad on top of the drawers listing what's being built right now. */
