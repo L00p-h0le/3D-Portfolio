@@ -12,7 +12,7 @@ interface Tween { start: number; duration: number; update: (t: number) => void; 
 
 // Hotspot labels rendered by React; the room projects them into place every frame.
 export const HOTSPOTS: { action: RoomAction; label: string; point: Vec3; num: string }[] = [
-  { action:'desktop', label:'The desktop', point:[-.65,2.5,-2.2], num:'01' },
+  { action:'desktop', label:'The desktop', point:[-.75,2.85,-2.6], num:'01' },
   { action:'todo', label:'On my list', point:[-3.2,1.95,.19], num:'02' },
   { action:'curtains', label:'Pull the cord', point:[2.84,3.72,-3.3], num:'☼' },
   { action:'music', label:'Good company', point:[2.35,1.45,-2.6], num:'♪' },
@@ -83,6 +83,9 @@ export class Room {
   private cones: THREE.Mesh[] = [];
   private stereoLed!: THREE.MeshStandardMaterial;
   private musicOn = false;
+  private backlight!: THREE.MeshBasicMaterial;
+  private rgb!: { glow: THREE.MeshBasicMaterial; fans: THREE.MeshStandardMaterial; light: THREE.PointLight; blades: THREE.Group[] };
+  private rgbNight = 0;
   private musicProgress: () => number = () => 0;
   private avatar!: THREE.Group;
   private pelvis!: THREE.Group;
@@ -153,7 +156,7 @@ export class Room {
     this.sun=new THREE.DirectionalLight('#fff0cc',3.1);this.sun.position.set(-1,8,5);this.sun.castShadow=true;
     this.sun.shadow.mapSize.set(2048,2048);Object.assign(this.sun.shadow.camera,{left:-8,right:8,top:8,bottom:-8,near:.5,far:25});this.sun.shadow.normalBias=.03;this.sun.shadow.bias=-.0003;this.sun.shadow.radius=4;this.scene.add(this.sun);
     this.lampLight=new THREE.PointLight('#ffd295',0,8,1.5);this.lampLight.position.set(-2,2.1,-2.3);this.scene.add(this.lampLight);
-    this.monitorLight=new THREE.PointLight('#a0cce5',.2,4,2);this.monitorLight.position.set(-.7,1.5,-2);this.scene.add(this.monitorLight);
+    this.monitorLight=new THREE.PointLight('#7f9cff',.2,4,2);this.monitorLight.position.set(-.75,1.95,-3.0);this.scene.add(this.monitorLight);
     this.moon=new THREE.DirectionalLight('#b1cfe7',0);this.moon.position.set(2,5,-4);this.scene.add(this.moon);
   }
   private buildRoom(){
@@ -219,33 +222,150 @@ export class Room {
     await this.tween(.3,t=>{arm.rotation.z=THREE.MathUtils.lerp(CORD.pull,0,t);arm.rotation.x=-.35*(1-t);});
     this.waving=false;
   }
+  /** A soft slab: rounded corners in plan and bevelled (bullnosed) top and bottom edges, like a moulded desk top. */
+  private slab(w: number,d: number,h: number,material: THREE.Material,x: number,y: number,z: number,parent: THREE.Object3D,radius=.05,bevel=.02){
+    const b=Math.min(bevel,h/2-.001,w/4,d/4),sw=w-2*b,sd=d-2*b,r=Math.max(.001,Math.min(radius-b,sw/2-.001,sd/2-.001));
+    const s=new THREE.Shape();
+    s.moveTo(-sw/2+r,-sd/2);s.lineTo(sw/2-r,-sd/2);s.absarc(sw/2-r,-sd/2+r,r,-Math.PI/2,0,false);
+    s.lineTo(sw/2,sd/2-r);s.absarc(sw/2-r,sd/2-r,r,0,Math.PI/2,false);
+    s.lineTo(-sw/2+r,sd/2);s.absarc(-sw/2+r,sd/2-r,r,Math.PI/2,Math.PI,false);
+    s.lineTo(-sw/2,-sd/2+r);s.absarc(-sw/2+r,-sd/2+r,r,Math.PI,Math.PI*1.5,false);
+    const depth=Math.max(.001,h-2*b);
+    const geo=new THREE.ExtrudeGeometry(s,{depth,bevelEnabled:b>0,bevelThickness:b,bevelSize:b,bevelSegments:4,curveSegments:10});
+    geo.translate(0,0,-depth/2);geo.rotateX(-Math.PI/2);
+    const mesh=new THREE.Mesh(geo,material);mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;parent.add(mesh);return mesh;
+  }
+  /** A slice of a cylinder wall: bows toward +z (a curved monitor) or toward -z (a chair back hugging the sitter). */
+  private arcPanel(R: number,width: number,height: number,material: THREE.Material,parent: THREE.Object3D,towardPlusZ=true){
+    const t=width/R;const geo=new THREE.CylinderGeometry(R,R,height,40,1,true,towardPlusZ?Math.PI-t/2:-t/2,t);
+    if(towardPlusZ){geo.scale(-1,1,1);geo.translate(0,0,R);}else geo.translate(0,0,-R);
+    const mesh=new THREE.Mesh(geo,material);mesh.castShadow=true;mesh.receiveShadow=true;parent.add(mesh);return mesh;
+  }
+  private lathe(points: [number,number][],material: THREE.Material,x: number,y: number,z: number,parent: THREE.Object3D,segments=32){
+    const mesh=new THREE.Mesh(new THREE.LatheGeometry(points.map(([r,h])=>new THREE.Vector2(r,h)),segments),material);
+    mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;parent.add(mesh);return mesh;
+  }
   private buildDesk(){
     const m=this.m;const g=this.group(-.9,0,-2.48);
-    this.box(2.8,.13,1.17,m.wood,0,1.19,0,g,.045);
-    for(const x of [-1.23,1.23])for(const z of [-.43,.43])this.box(.095,1.13,.095,m.darkWood,x,.6,z,g);
-    this.box(2.4,.07,.07,m.darkWood,0,.4,-.43,g);
-    this.box(.97,.012,.46,m.darkGreen,.1,1.267,.17,g,.05);
-    const mon=this.group(.15,1.82,-.28,g);
-    this.box(1.25,.77,.075,m.black,0,0,0,mon,.04);
-    this.box(1.14,.65,.012,m.screen,0,.015,.047,mon,.01);
-    this.box(.07,.25,.07,m.black,0,-.46,-.02,mon);this.box(.4,.025,.25,m.black,0,-.56,0,mon);
+    const walnut=this.material('#8a5a36',{map:m.wood.map,roughness:.55});
+    const charcoal=this.material('#2c2f36',{roughness:.75});
+    const white=this.material('#f4f4f6',{roughness:.4});
+    // Moulded walnut top with a bullnose edge, overhanging a soft charcoal base.
+    this.slab(3.3,1.17,.18,walnut,.25,1.17,0,g,.16,.07);
+    for(const x of [-1.13,1.63])this.slab(.54,1.02,1.08,charcoal,x,.54,-.03,g,.08,.035);
+    this.slab(2.3,.06,.94,charcoal,.25,.6,-.49,g,.02,.015);
+    this.slab(2.3,.08,.1,charcoal,.25,1.04,.47,g,.03,.02);
+    // Riser shelf on two soft legs.
+    for(const x of [-.57,.87])this.slab(.08,.36,.12,charcoal,x,1.32,-.3,g,.03,.012);
+    this.slab(1.6,.42,.07,walnut,.15,1.415,-.3,g,.06,.025);
+    // Curved ultrawide with a slim bezel, a rounded back and a white stand.
+    const mon=this.group(.15,1.86,-.33,g);
+    const shell=this.material('#18191e',{roughness:.45,side:THREE.DoubleSide});
+    this.arcPanel(2.2,1.34,.6,shell,mon).position.z=-.004;
+    this.arcPanel(2.2,1.34,.6,shell,mon).position.z=-.03;
+    for(const y of [-.3,.3]){const lip=this.arcPanel(2.2,1.34,.026,shell,mon);lip.position.set(0,y,-.017);lip.scale.z=1;}
+    this.box(.56,.32,.1,shell,0,-.02,-.09,mon,.05);
     const tex=this.desktopTexture();
-    const display=new THREE.Mesh(new THREE.PlaneGeometry(1.14,.65),new THREE.MeshBasicMaterial({map:tex}));display.position.set(0,.015,.055);mon.add(display);
-    this.box(.7,.035,.25,m.cream,.02,1.29,.25,g);
-    for(let r=0;r<4;r++)for(let i=0;i<11;i++)this.box(.045,.008,.04,i===0?m.green:m.white,-.28+i*.055,1.313,.16+r*.055,g,.004);
-    this.sphere(.055,m.cream,.56,1.3,.29,g,[.8,.3,1.3]);
-    this.cylinder(.09,.073,.17,m.terracotta,-.93,1.34,.3,g);this.cylinder(.073,.073,.008,m.soil,-.93,1.429,.3,g);
-    const handle=new THREE.Mesh(new THREE.TorusGeometry(.065,.016,8,16),m.terracotta);handle.position.set(-.82,1.36,.3);g.add(handle);
-    this.cylinder(.14,.15,.025,m.darkGreen,-1.03,1.28,-.32,g);this.cylinder(.016,.016,.5,m.darkGreen,-1.03,1.52,-.32,g);
-    this.cylinder(.09,.24,.23,m.green,-1.03,1.85,-.32,g);this.cylinder(.19,.19,.018,m.cream,-1.03,1.73,-.32,g);
+    this.arcPanel(2.2,1.3,.56,new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}),mon).position.z=.004;
+    this.box(.07,.2,.05,white,0,-.31,-.13,mon,.022);
+    this.slab(.38,.22,.024,white,0,-.402,-.08,mon,.07,.01);
+    // Blue backlight: an additive halo behind the screen, brighter at night.
+    const glow=document.createElement('canvas');glow.width=glow.height=128;const gc=glow.getContext('2d')!;
+    const grad=gc.createRadialGradient(64,64,8,64,64,64);grad.addColorStop(0,'rgba(110,150,255,1)');grad.addColorStop(.55,'rgba(80,110,255,.45)');grad.addColorStop(1,'rgba(60,90,255,0)');
+    gc.fillStyle=grad;gc.fillRect(0,0,128,128);
+    this.backlight=new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(glow),transparent:true,opacity:.12,blending:THREE.AdditiveBlending,depthWrite:false});
+    const halo=new THREE.Mesh(new THREE.PlaneGeometry(2.1,1.15),this.backlight);halo.position.set(0,.02,-.2);mon.add(halo);
+    // Over-ear headphones hung on the top right corner: padded band, soft cups.
+    const purple=this.material('#4a4680',{roughness:.45}),lavender=this.material('#cdc8f2',{roughness:.5}),cushion=this.material('#2e2b4d',{roughness:.9});
+    const hp=this.group(.55,.315,-.015,mon);
+    const band=new THREE.Mesh(new THREE.TorusGeometry(.105,.02,12,32,Math.PI),purple);band.rotation.y=Math.PI/2;band.castShadow=true;hp.add(band);
+    const pad=new THREE.Mesh(new THREE.TorusGeometry(.105,.024,12,24,Math.PI*.5),cushion);pad.rotation.set(0,Math.PI/2,Math.PI/4);hp.add(pad);
+    for(const z of [-.105,.105]){
+      const cup=this.group(0,-.05,z,hp);
+      this.sphere(.062,lavender,0,0,0,cup,[1,1.1,.55]);
+      const ring=new THREE.Mesh(new THREE.TorusGeometry(.05,.016,10,28),cushion);ring.position.z=-Math.sign(z)*.022;cup.add(ring);
+      this.box(.03,.07,.02,purple,0,.06,0,cup,.01);
+    }
+    // Desk mat, a 65% mechanical keyboard with a coiled cable, mouse, phone and a coffee.
+    this.slab(1.3,.52,.01,this.material('#24262d',{roughness:.95}),.2,1.265,.24,g,.05,.004);
+    this.slab(.66,.24,.045,this.material('#2b2a3a',{roughness:.5}),.1,1.29,.25,g,.035,.015);
+    const keyGeo=new RoundedBoxGeometry(.034,.022,.034,2,.007);
+    const keyWhite=this.material('#f3f2f8',{roughness:.45}),keyPurple=this.material('#7366d1',{roughness:.45});
+    const keyAt=(x: number,z: number,w=1,purpleKey=false)=>{const k=new THREE.Mesh(keyGeo,purpleKey?keyPurple:keyWhite);k.scale.x=w;k.position.set(x,1.322,z);k.castShadow=true;g.add(k);};
+    for(let r=0;r<5;r++){
+      const z=.25-.084+r*.042;
+      if(r===4){[0,1,2].forEach(i=>keyAt(-.181+i*.04,z,1,true));keyAt(-.181+6*.04,z,7.4,false);[10,11,12,13,14].forEach(i=>keyAt(-.181+i*.04,z,1,true));continue;}
+      for(let i=0;i<15;i++)keyAt(-.181+i*.04,z,1,i===0||i===14||(r===2&&i===13));
+    }
+    const coil: THREE.Vector3[]=[];for(let i=0;i<=160;i++){const t=i/160,a=t*TAU*10;coil.push(new THREE.Vector3(-.12+Math.cos(a)*.011,1.29+Math.sin(a)*.011,.125-t*.26));}
+    const cord=new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(coil),400,.0035,6),keyPurple);cord.castShadow=true;g.add(cord);
+    this.sphere(.05,white,.64,1.29,.27,g,[.72,.36,1.15]);this.box(.008,.01,.02,keyPurple,.64,1.307,.235,g,.003);
+    this.slab(.1,.2,.014,this.material('#86b9e8',{roughness:.3}),-.52,1.274,.33,g,.02,.006).rotation.y=.35;
+    this.lathe([[0,0],[.06,0],[.085,.01],[.082,.014],[.055,.006],[0,.006]],white,1.05,1.266,.2,g);
+    this.lathe([[0,0],[.038,0],[.044,.008],[.05,.08],[.046,.082],[.041,.012],[0,.012]],white,1.05,1.272,.2,g);
+    this.cylinder(.045,.045,.004,this.material('#4a2c1c'),1.05,1.345,.2,g,24);
+    const handle=new THREE.Mesh(new THREE.TorusGeometry(.024,.007,8,16),white);handle.position.set(1.105,1.31,.2);g.add(handle);
+    // Desk lamp, moved to the far left; its light warms the room at night.
+    this.cylinder(.14,.15,.025,m.darkGreen,-1.22,1.275,-.35,g);this.cylinder(.016,.016,.5,m.darkGreen,-1.22,1.52,-.35,g);
+    this.cylinder(.09,.24,.23,m.green,-1.22,1.85,-.35,g);this.cylinder(.19,.19,.018,m.cream,-1.22,1.73,-.35,g);
     this.interactive(g,'desktop');
-    // Swivel chair, upholstered with a five-point base.
+    // Studio monitors: soft-cornered cabinets with a big woofer (surround, cone, dust cap) and a domed tweeter.
+    const navy=this.material('#3d3a66',{roughness:.5}),rubber=this.material('#1b1b26',{roughness:.9}),coneMat=this.material('#2a2938',{roughness:.7,side:THREE.DoubleSide});
+    for(const [x,z,turn] of [[-.82,-.3,.25],[1.12,-.35,-.25]] as const){
+      const sp=this.group(x,1.465,z,g);sp.rotation.y=turn;
+      this.slab(.25,.27,.41,navy,0,0,0,sp,.06,.025);
+      for(const [y,r] of [[-.07,.072],[.105,.03]] as const){
+        const bezel=new THREE.Mesh(new THREE.TorusGeometry(r+.012,.01,10,40),this.material('#2a2848'));bezel.position.set(0,y,.135);sp.add(bezel);
+        const surround=new THREE.Mesh(new THREE.TorusGeometry(r,.008,10,40),rubber);surround.position.set(0,y,.133);sp.add(surround);
+        if(y<0){
+          const cone=this.lathe([[.012,0],[.03,.004],[.06,.017],[r-.004,.022]],coneMat,0,y,.11,sp,40);cone.rotation.x=Math.PI/2;this.cones.push(cone);
+          this.sphere(.02,rubber,0,y,.125,sp,[1,1,.55]);
+        } else this.sphere(r*.75,this.material('#d9d7e8',{roughness:.3,metalness:.3}),0,y,.128,sp,[1,1,.45]);
+      }
+      this.sphere(.008,this.material('#ff5a5a',{emissive:'#ff3b3b',emissiveIntensity:1.2}),.085,.17,.134,sp);
+      this.interactive(sp,'music');
+    }
+    // RGB tower: rounded case with glass on the side and top; glowing ring fans behind both, an RGB strip on the front.
+    const tw=this.group(1.58,1.585,-.2,g);
+    this.slab(.38,.56,.64,this.material('#1d1f2b',{roughness:.4}),0,0,0,tw,.05,.025);
+    const fans=this.material('#2a3fff',{emissive:'#4f7dff',emissiveIntensity:1.2});
+    const inner=new THREE.MeshBasicMaterial({color:'#3b5bff',transparent:true,opacity:.35,blending:THREE.AdditiveBlending,depthWrite:false});
+    const hub=this.material('#11131a',{roughness:.6}),bladeMat=this.material('#1a1c26');
+    const blades: THREE.Group[]=[];
+    const fan=(x: number,y: number,z: number,rot: Vec3,size=.075)=>{
+      const f=this.group(x,y,z,tw);f.rotation.set(...rot);
+      const ring=new THREE.Mesh(new THREE.TorusGeometry(size,.012,10,40),fans);f.add(ring);
+      const disc=this.cylinder(size-.006,size-.006,.004,hub,0,0,-.004,f,32);disc.rotation.x=Math.PI/2;
+      const b=this.group(0,0,.002,f);blades.push(b);
+      for(let i=0;i<7;i++){const arm=this.group(0,0,0,b);arm.rotation.z=i*TAU/7;const blade=this.box(.024,size*.62,.003,bladeMat,.008,size*.42,0,arm,0);blade.rotation.z=-.45;}
+      const cap=this.cylinder(.02,.02,.006,fans,0,0,.004,f,20);cap.rotation.x=Math.PI/2;
+    };
+    for(const y of [.19,0,-.19])fan(.19,y,0,[0,Math.PI/2,0]);
+    for(const z of [-.13,.13])fan(0,.321,z,[-Math.PI/2,0,0],.07);
+    this.box(.004,.56,.5,inner,.193,0,0,tw,0);
+    const glass=this.material('#9fb0ff',{transparent:true,opacity:.16,roughness:.05,metalness:.2});
+    this.box(.008,.58,.5,glass,.205,0,0,tw,0);this.box(.32,.008,.5,glass,0,.33,0,tw,0);
+    this.box(.016,.5,.008,fans,.13,0,.281,tw,.004);
+    const light=new THREE.PointLight('#5b7cff',.25,2.5,2);light.position.set(.35,0,.2);tw.add(light);
+    this.rgb={glow:inner,fans,light,blades};
+    // Ergonomic mesh chair: plump waterfall seat, a curved mesh back that hugs the sitter, headrest and lumbar pad.
     this.chair=this.group(-.75,0,-1.35);
-    this.box(.65,.13,.64,m.darkGreen,0,.66,0,this.chair,.09);
-    this.box(.65,.68,.12,m.darkGreen,0,1.02,.29,this.chair,.09);
-    this.cylinder(.048,.048,.49,m.metal,0,.36,0,this.chair);
-    for(let i=0;i<5;i++){const leg=this.group(0,.14,0,this.chair);leg.rotation.y=i*TAU/5;this.box(.045,.045,.47,m.metal,0,0,.2,leg);this.sphere(.065,m.black,0,-.04,.39,leg);}
-    for(const x of [-.39,.39]){this.box(.055,.27,.055,m.metal,x,.81,0,this.chair);this.box(.075,.06,.4,m.darkGreen,x,.96,-.02,this.chair);}
+    const seat=this.material('#cfd2d4',{roughness:.8}),frame=this.material('#8d9196',{metalness:.3,roughness:.45}),dark=this.material('#3b3e43');
+    const mesh=this.material('#55595e',{transparent:true,opacity:.85,roughness:.95,side:THREE.DoubleSide});
+    this.slab(.64,.62,.13,seat,0,.66,0,this.chair,.14,.055);
+    for(const x of [-.25,.25])this.box(.05,.24,.05,frame,x,.77,.3,this.chair,.015);
+    const back=this.group(0,1.18,.34,this.chair);back.rotation.x=.1;
+    this.arcPanel(.9,.56,.8,mesh,back,false);
+    for(const y of [-.41,.41])this.arcPanel(.9,.6,.045,frame,back,false).position.y=y;
+    const edge=.9-.9*Math.cos(.3/.9);
+    for(const s of [-1,1])this.box(.045,.86,.045,frame,s*.9*Math.sin(.3/.9),0,-edge,back,.018);
+    const lumbar=this.arcPanel(.88,.48,.12,seat,back,false);lumbar.position.set(0,-.18,-.02);
+    this.box(.04,.14,.03,frame,0,.5,.01,back,.012);
+    const head=this.arcPanel(.7,.4,.15,seat,back,false);head.position.set(0,.62,0);
+    const head2=this.arcPanel(.7,.4,.15,seat,back,false);head2.position.set(0,.62,.03);
+    this.cylinder(.045,.045,.49,dark,0,.36,0,this.chair);this.cylinder(.06,.05,.06,frame,0,.57,0,this.chair);
+    for(let i=0;i<5;i++){const leg=this.group(0,.14,0,this.chair);leg.rotation.y=i*TAU/5;this.box(.05,.045,.47,dark,0,0,.2,leg,.018);this.sphere(.065,m.black,0,-.04,.39,leg);}
+    for(const x of [-.38,.38]){this.box(.05,.27,.05,frame,x,.81,0,this.chair,.015);this.slab(.09,.38,.05,dark,x,.96,-.02,this.chair,.04,.018);}
     this.interactive(this.chair,'about');
   }
   private buildDrawers(){
@@ -268,7 +388,7 @@ export class Room {
   }
   /** The monitor's wallpaper: a tiny desktop hinting at the full one that opens on click. */
   private desktopTexture(){
-    const W=640,H=360;const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;const c=canvas.getContext('2d')!;
+    const W=840,H=360;const canvas=document.createElement('canvas');canvas.width=W;canvas.height=H;const c=canvas.getContext('2d')!;
     const tex=new THREE.CanvasTexture(canvas);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=this.renderer.capabilities.getMaxAnisotropy();
     const round=(x: number,y: number,w: number,h: number,r: number)=>{c.beginPath();c.roundRect(x,y,w,h,r);};
     const images: { wall?: HTMLImageElement }={};const logos: Record<string,HTMLImageElement>={};
@@ -514,7 +634,7 @@ export class Room {
     await this.tween(.45,t=>{d.position.z=THREE.MathUtils.lerp(start,.65,t);this.arms[0].rotation.x=-.6*Math.sin(t*Math.PI);});
   }
   async visit(action: RoomAction,index=0){
-    if(action==='desktop'){await this.resetCamera();await this.focusCamera(new THREE.Vector3(-.75,1.84,-2.76),2.6);return;}
+    if(action==='desktop'){await this.resetCamera();await this.focusCamera(new THREE.Vector3(-.75,1.86,-2.78),2.35);return;}
     if(action==='about'){await this.wave();return;}
     await this.stand();await this.walkTo(-.45,.35);
     if(action==='curtains'){await this.walkTo(...CORD.aisle);await this.walkTo(...CORD.stand);this.avatar.rotation.y=Math.PI;await this.pullCord();return;}
@@ -535,7 +655,7 @@ export class Room {
     await this.tween(instant?0:1,t=>{
       const v=THREE.MathUtils.lerp(from,to,t);
       this.curtains.forEach((curtain,i)=>{curtain.position.x=(i===0?-1:1)*THREE.MathUtils.lerp(1.46,.75,v);curtain.scale.x=1+v*1.7;});
-      this.ambient.intensity=2.5-v*1.8;this.sun.intensity=3.1-v*2.95;this.moon.intensity=v*1.4;this.lampLight.intensity=v*6;this.monitorLight.intensity=.2+v*2;
+      this.ambient.intensity=2.5-v*1.8;this.sun.intensity=3.1-v*2.95;this.moon.intensity=v*1.4;this.lampLight.intensity=v*6;this.monitorLight.intensity=.2+v*2;this.backlight.opacity=.12+v*.78;this.rgbNight=v;
       this.windowMaterial.color.set('#d8e3d6').lerp(new THREE.Color('#536e84'),v);this.windowMaterial.emissiveIntensity=.35-v*.2;
     });
   }
@@ -571,6 +691,10 @@ export class Room {
       this.torso.scale.y=1+Math.sin(this.time*1.8)*.006;
     }
     this.applyCord();this.animateStereo(dt);
+    // The tower's fans spin and its RGB breathes; both glow harder at night.
+    const breathe=this.reduced?1:.85+.15*Math.sin(this.time*1.6);
+    if(!this.reduced)this.rgb.blades.forEach(b=>b.rotation.z-=dt*7);
+    this.rgb.fans.emissiveIntensity=(1+1.6*this.rgbNight)*breathe;this.rgb.glow.opacity=(.3+.35*this.rgbNight)*breathe;this.rgb.light.intensity=.25+1.5*this.rgbNight;
     const owner=Date.now()/1000+ownerTime.offsetMinutes*60;
     this.clockHands.second.rotation.z=-(owner%60)/60*TAU;this.clockHands.minute.rotation.z=-(owner/60%60)/60*TAU;this.clockHands.hour.rotation.z=-(owner/3600%12)/12*TAU;
     if(this.controls.enabled)this.controls.update();
